@@ -62,7 +62,7 @@ class Ingester:
     def _split_long_text(self, text: str) -> list[str]:
         """Split text into overlapping char-bounded chunks, breaking on newlines where possible."""
         if len(text) <= self.max_chars:
-            return [text]
+            return [text] if text else []
 
         parts: list[str] = []
         start = 0
