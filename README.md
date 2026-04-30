@@ -9,7 +9,7 @@ Built as a learning project to understand RAG pipelines and agentic systems from
 ## How it works
 
 ```
-Windows Task Scheduler (8am)
+Windows Task Scheduler (10am & 14pm)
         ↓
    run_daily.sh  (activates venv)
         ↓
@@ -135,11 +135,28 @@ python pipeline/send_email.py
 
 ### 7. Automate with Windows Task Scheduler
 
-**Action:**
-- Program: `wsl.exe`
-- Arguments: `-d Ubuntu -e bash -lc "cd ~/interview_agent && ./run_daily.sh"`
+Open **Task Scheduler** on Windows → **Create Basic Task** → name it `Interview Agent`.
 
-**Trigger:** Daily at 08:00.
+**Trigger tab** — add two daily triggers:
+- `10:00` — click New → Daily → 10:00
+- `14:00` — click New → Daily → 14:00
+
+**Action tab:**
+- Action: `Start a program`
+- Program: `wsl.exe`
+- Arguments: `-d Ubuntu -e bash -lc "cd /home/<your-username>/interview_agent && ./run_daily.sh"`
+
+> Use the full Linux path (e.g. `/home<your-username>/interview_agent`) — Task Scheduler does not expand `~`.
+
+**Settings tab:**
+- Stop the task if it runs longer than: `10 minutes`
+- If the task is already running: `Do not start a new instance`
+
+**Test it:** Right-click the task → **Run**, then check the log:
+
+```bash
+tail ~/interview_agent/logs/run.log
+```
 
 ---
 
