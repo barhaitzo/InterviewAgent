@@ -58,10 +58,14 @@ interview_agent/
     ingest.py           # markdown → chunks → ChromaDB
     agent.py            # retrieve + generate + parse
     memory.py           # SQLite read/write, topic rotation
-    email_sender.py       # SMTP delivery
+    email_sender.py     # SMTP delivery
 
   data/
     crash_course.md     # source document (swap to change interview topic)
+
+  storage/              # auto-created at runtime, gitignored
+    chroma_db/          # vector store
+    history.db          # topic history
 
   docs/
     PROJECT_SPEC.md     # full architecture and design decisions
@@ -146,7 +150,7 @@ Open **Task Scheduler** on Windows → **Create Basic Task** → name it `Interv
 - Program: `wsl.exe`
 - Arguments: `-d Ubuntu -e bash -lc "cd /home/<your-username>/interview_agent && ./run_daily.sh"`
 
-> Use the full Linux path (e.g. `/home<your-username>/interview_agent`) — Task Scheduler does not expand `~`.
+> Use the full Linux path (e.g. `/home/<your-username>/interview_agent`) — Task Scheduler does not expand `~`.
 
 **Settings tab:**
 - Stop the task if it runs longer than: `10 minutes`
