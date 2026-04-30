@@ -1,6 +1,7 @@
-"""Retrieval-augmented generation agent: retrieve chunks, call Ollama, parse output."""
+"""Retrieval-augmented generation agent: retrieve chunks, call LLM, parse output."""
 import json
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -9,9 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chromadb
 import ollama
+from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 
 import config
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +46,18 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         collection_name: str = config.COLLECTION_NAME,
         embed_model: str = config.EMBED_MODEL,
         gen_model: str = config.GEN_MODEL,
+        gen_provider: str = config.GEN_PROVIDER,
         top_k: int = config.TOP_K,
     ) -> None:
         self.embed_model = embed_model
         self.gen_model = gen_model
+        self.gen_provider = gen_provider.lower()
         self.top_k = top_k
         self._client = chromadb.PersistentClient(path=str(chroma_path))
         self._collection = self._client.get_collection(collection_name)
 
     # ------------------------------------------------------------------
-    # Internal
+    # Internal — parsing
     # ------------------------------------------------------------------
 
     def _parse_output(self, raw: str) -> AgentOutput:
@@ -72,6 +78,78 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         while not stop.wait(interval):
             elapsed += interval
             logger.info("  ... LLM still generating (%ds elapsed)", elapsed)
+
+    # ------------------------------------------------------------------
+    # Internal — provider dispatch
+    # ------------------------------------------------------------------
+
+    def _call_ollama(self, messages: list[dict], temperature: float = 0.4) -> str:
+        resp = ollama.chat(
+            model=self.gen_model,
+            messages=messages,
+            options={"temperature": temperature},
+        )
+        return resp.message.content
+
+    def _call_anthropic(self, messages: list[dict], temperature: float = 0.4) -> str:
+        try:
+            import anthropic as _anthropic
+        except ImportError:
+            logger.warning("anthropic package not installed — falling back to Ollama.")
+            return self._call_ollama(messages, temperature)
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set — falling back to Ollama.")
+            return self._call_ollama(messages, temperature)
+
+        try:
+            client = _anthropic.Anthropic(api_key=api_key)
+            system = next((m["content"] for m in messages if m["role"] == "system"), "")
+            user_messages = [m for m in messages if m["role"] != "system"]
+            resp = client.messages.create(
+                model=config.ANTHROPIC_MODEL,
+                max_tokens=1024,
+                system=system,
+                messages=user_messages,
+                temperature=temperature,
+            )
+            return resp.content[0].text
+        except (_anthropic.AuthenticationError, _anthropic.RateLimitError) as exc:
+            logger.warning("Anthropic API unavailable (%s) — falling back to Ollama.", exc)
+            return self._call_ollama(messages, temperature)
+
+    def _call_openai(self, messages: list[dict], temperature: float = 0.4) -> str:
+        try:
+            import openai as _openai
+        except ImportError:
+            logger.warning("openai package not installed — falling back to Ollama.")
+            return self._call_ollama(messages, temperature)
+
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            logger.warning("OPENAI_API_KEY not set — falling back to Ollama.")
+            return self._call_ollama(messages, temperature)
+
+        try:
+            client = _openai.OpenAI(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=config.OPENAI_MODEL,
+                messages=messages,
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content
+        except (_openai.AuthenticationError, _openai.RateLimitError) as exc:
+            logger.warning("OpenAI API unavailable (%s) — falling back to Ollama.", exc)
+            return self._call_ollama(messages, temperature)
+
+    def _call_provider(self, messages: list[dict], temperature: float = 0.4) -> str:
+        """Dispatch to the configured provider, falling back to Ollama on failure."""
+        if self.gen_provider == "anthropic":
+            return self._call_anthropic(messages, temperature)
+        if self.gen_provider == "openai":
+            return self._call_openai(messages, temperature)
+        return self._call_ollama(messages, temperature)
 
     # ------------------------------------------------------------------
     # Public API
@@ -100,7 +178,7 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         return results["documents"][0], results["ids"][0]
 
     def generate(self, topic: str, documents: list[str]) -> AgentOutput:
-        """Call Ollama, parse JSON output. Retries once on parse failure."""
+        """Call the configured LLM provider, parse JSON output. Retries once on parse failure."""
         context = "\n\n---\n\n".join(documents)
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -110,12 +188,7 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         stop = threading.Event()
         threading.Thread(target=self._heartbeat, args=(stop,), daemon=True).start()
         try:
-            resp = ollama.chat(
-                model=self.gen_model,
-                messages=messages,
-                options={"temperature": 0.4},
-            )
-            raw = resp.message.content
+            raw = self._call_provider(messages, temperature=0.4)
         finally:
             stop.set()
 
@@ -133,17 +206,13 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
                     ),
                 },
             ]
-            resp2 = ollama.chat(
-                model=self.gen_model,
-                messages=messages,
-                options={"temperature": 0.2},
-            )
-            return self._parse_output(resp2.message.content)
+            raw2 = self._call_provider(messages, temperature=0.2)
+            return self._parse_output(raw2)
 
     def run(self, topic: str) -> tuple[AgentOutput, list[str]]:
         """Full retrieve → generate pipeline. Returns (output, chunk_ids_used)."""
         documents, chunk_ids = self.retrieve(topic)
-        logger.info("Retrieved %d chunks. Calling LLM...", len(documents))
+        logger.info("Retrieved %d chunks. Calling LLM (%s)...", len(documents), self.gen_provider)
         output = self.generate(topic, documents)
         return output, chunk_ids
 

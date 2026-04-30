@@ -219,9 +219,21 @@ All tunable settings live in `config.py`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `GEN_MODEL` | `qwen2.5:7b` | Ollama generation model |
-| `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model |
+| `GEN_MODEL` | `qwen2.5:7b` | Ollama generation model (used when `GEN_PROVIDER = "ollama"`) |
+| `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model (always local) |
+| `GEN_PROVIDER` | `ollama` | Generation provider: `"ollama"`, `"anthropic"`, or `"openai"` |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model (used when `GEN_PROVIDER = "anthropic"`) |
+| `OPENAI_MODEL` | `gpt-4o` | OpenAI model (used when `GEN_PROVIDER = "openai"`) |
 | `CHUNK_SIZE` | `500` | Approximate tokens per chunk |
 | `TOP_K` | `3` | Chunks retrieved per topic |
 | `RECENCY_DAYS` | `14` | Topic repeat window (days) |
 | `COLLECTION_NAME` | `ml_system_design` | ChromaDB collection name |
+
+To use an API provider, set `GEN_PROVIDER` in `config.py` and add the key to `.env`:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+If the key is missing, invalid, or the quota is exhausted, the pipeline falls back to Ollama automatically. Embeddings always run locally via Ollama regardless of provider.
