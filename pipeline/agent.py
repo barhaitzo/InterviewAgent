@@ -115,7 +115,7 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
                 temperature=temperature,
             )
             return resp.content[0].text
-        except (_anthropic.AuthenticationError, _anthropic.RateLimitError) as exc:
+        except _anthropic.APIError as exc:
             logger.warning("Anthropic API unavailable (%s) — falling back to Ollama.", exc)
             return self._call_ollama(messages, temperature)
 
