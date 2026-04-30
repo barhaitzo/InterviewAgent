@@ -61,7 +61,7 @@ interview_agent/
     email_sender.py     # SMTP delivery
 
   data/
-    crash_course.md     # source document (swap to change interview topic)
+    ml_system_design_crash_course.md     # source document (swap to change interview topic)
 
   storage/              # auto-created at runtime, gitignored
     chroma_db/          # vector store
@@ -114,7 +114,7 @@ EMAIL_TO=your@gmail.com
 
 ### 4. Ingest your source document
 
-Place your study material in `data/crash_course.md` (markdown with `#`/`##`/`###` headings), then run **from a native WSL terminal** (not through an IDE terminal — this step is memory-intensive):
+Place your study material in `data/ml_system_design_crash_course.md` (markdown with `#`/`##`/`###` headings), then run **from a native WSL terminal** (not through an IDE terminal — this step is memory-intensive):
 
 ```bash
 source .venv/bin/activate
@@ -166,7 +166,7 @@ tail ~/interview_agent/logs/run.log
 
 ## Changing the interview topic
 
-1. Replace `data/crash_course.md` with your new source document
+1. Replace `data/ml_system_design_crash_course.md` with your new source document
 2. Update `COLLECTION_NAME` in `config.py`
 3. Re-run `python pipeline/ingest.py`
 

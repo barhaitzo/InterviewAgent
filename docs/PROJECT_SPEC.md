@@ -82,7 +82,7 @@ Windows Task Scheduler (8am daily)
   run_daily.py             # orchestrator
   run_daily.sh             # bash entry point invoked by Task Scheduler
   data/
-    crash_course.md        # source document
+    ml_system_design_crash_course.md        # source document
   chroma_db/               # auto-created by Chroma
   history.db               # auto-created SQLite
   logs/
@@ -186,7 +186,7 @@ TOP_K = 3
 RECENCY_DAYS = 14
 CHROMA_PATH = "./chroma_db"
 HISTORY_DB_PATH = "./history.db"
-SOURCE_DOC = "./data/crash_course.md"
+SOURCE_DOC = "./data/ml_system_design_crash_course.md"
 LOG_PATH = "./logs/run.log"
 ```
 

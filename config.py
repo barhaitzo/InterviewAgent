@@ -14,5 +14,5 @@ COLLECTION_NAME = "ml_system_design"  # change this when swapping interview topi
 
 CHROMA_PATH = Path("./storage/chroma_db")
 HISTORY_DB_PATH = Path("./storage/history.db")
-SOURCE_DOC = Path("./data/crash_course.md")
+SOURCE_DOC = Path("./data/ml_system_design_crash_course.md")
 LOG_PATH = Path("./logs/run.log")
