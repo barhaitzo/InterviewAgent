@@ -19,8 +19,8 @@ build/
 .ruff_cache/
 
 # Data stores (auto-created at runtime)
-chroma_db/
-history.db
+storage/*
+!storage/.gitkeep
 
 # Logs
 logs/

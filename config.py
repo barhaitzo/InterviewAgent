@@ -12,7 +12,7 @@ RECENCY_DAYS = 14       # topics used within this window are skipped
 
 COLLECTION_NAME = "ml_system_design"  # change this when swapping interview topics
 
-CHROMA_PATH = Path("./chroma_db")
-HISTORY_DB_PATH = Path("./history.db")
+CHROMA_PATH = Path("./storage/chroma_db")
+HISTORY_DB_PATH = Path("./storage/history.db")
 SOURCE_DOC = Path("./data/crash_course.md")
 LOG_PATH = Path("./logs/run.log")
