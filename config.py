@@ -10,7 +10,7 @@ TOP_K = 3               # chunks retrieved per topic
 
 RECENCY_DAYS = 14       # topics used within this window are skipped
 
-COLLECTION_NAME = "ml_system_design"  # change this when swapping interview topics
+COLLECTION_NAME = "crash_course"  # change this when swapping interview topics
 
 CHROMA_PATH = Path("./chroma_db")
 HISTORY_DB_PATH = Path("./history.db")

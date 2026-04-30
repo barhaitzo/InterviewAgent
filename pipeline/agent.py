@@ -118,6 +118,7 @@ def generate(topic: str, documents: list[str]) -> AgentOutput:
 def run(topic: str) -> tuple[AgentOutput, list[str]]:
     """Full retrieve → generate pipeline. Returns (output, chunk_ids_used)."""
     documents, chunk_ids = retrieve(topic)
+    logger.info("Retrieved %d chunks. Calling LLM...", len(documents))
     output = generate(topic, documents)
     return output, chunk_ids
 
