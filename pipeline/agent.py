@@ -6,6 +6,8 @@ Run: python agent.py
 import json
 import logging
 import sys
+import threading
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -73,10 +75,18 @@ def retrieve(topic: str) -> tuple[list[str], list[str]]:
     return results["documents"][0], results["ids"][0]
 
 
+def _heartbeat(stop: threading.Event, interval: int = 15) -> None:
+    elapsed = 0
+    while not stop.wait(interval):
+        elapsed += interval
+        logger.info("  ... LLM still generating (%ds elapsed)", elapsed)
+
+
 def generate(topic: str, documents: list[str]) -> AgentOutput:
     """
     Format prompt, call Ollama, parse + validate JSON.
     Retries once if the first response is not valid JSON.
+    Logs a heartbeat every 15s so the log never looks hung.
     """
     context = "\n\n---\n\n".join(documents)
     user_content = f"Topic: {topic}\n\nExcerpts:\n{context}"
@@ -86,12 +96,18 @@ def generate(topic: str, documents: list[str]) -> AgentOutput:
         {"role": "user", "content": user_content},
     ]
 
-    resp = ollama.chat(
-        model=config.GEN_MODEL,
-        messages=messages,
-        options={"temperature": 0.4},
-    )
-    raw = resp.message.content
+    stop = threading.Event()
+    threading.Thread(target=_heartbeat, args=(stop,), daemon=True).start()
+    try:
+        resp = ollama.chat(
+            model=config.GEN_MODEL,
+            messages=messages,
+            options={"temperature": 0.4},
+        )
+        raw = resp.message.content
+    finally:
+        stop.set()
+
 
     try:
         return _parse_output(raw)
