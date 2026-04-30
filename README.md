@@ -140,6 +140,25 @@ python -m pytest tests/ -v
 
 The tests cover chunking, JSON parsing, topic rotation, and email building — all with mocked LLM and SMTP calls. A clean run here means the pipeline logic is sound before you commit to a full end-to-end run.
 
+#### Optional: end-to-end tests
+
+Once your `.env` is configured and Ollama is running, you can validate the live integrations as well:
+
+```bash
+pytest tests/ -m e2e -v -s
+```
+
+The `-s` flag disables output capture so progress is printed live — useful since Ollama generation can take 30–60 seconds with no other feedback.
+
+| Test | What it validates | Requires |
+|---|---|---|
+| `test_email_send` | Real email delivered via Gmail SMTP | `.env` credentials |
+| `test_agent_retrieve` | Embedding + ChromaDB retrieval | Ollama + ingested collection |
+| `test_agent_full_run` | Full retrieve → generate → parse cycle | Ollama + ingested collection |
+| `test_full_dry_run` | Complete pipeline without sending email | Ollama + ingested collection |
+
+These are intentionally excluded from the default `pytest` run — they hit live services and are meant to be run on demand, not on every change.
+
 ### 7. Test the full pipeline
 
 ```bash

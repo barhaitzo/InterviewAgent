@@ -1,6 +1,19 @@
 import pytest
 from pathlib import Path
 
+
+def pytest_collection_modifyitems(config, items):
+    """Skip e2e-marked tests unless -m e2e is explicitly requested."""
+    try:
+        markexpr = config.getoption("-m") or ""
+    except ValueError:
+        markexpr = ""
+    if "e2e" not in markexpr:
+        skip = pytest.mark.skip(reason="E2E test — run with: pytest -m e2e")
+        for item in items:
+            if "e2e" in item.keywords:
+                item.add_marker(skip)
+
 SAMPLE_MD = """\
 # ML System Design
 
