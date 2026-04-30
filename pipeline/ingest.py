@@ -8,6 +8,7 @@ import hashlib
 import logging
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -124,23 +125,29 @@ def parse_chunks(source_path: Path) -> list[dict]:
 # Embed + load (batched to keep peak RAM low)
 # ---------------------------------------------------------------------------
 
-_BATCH_SIZE = 20  # embed this many chunks at a time before writing to Chroma
+_BATCH_SIZE = 20   # chunks written to Chroma at a time (keeps peak RAM low)
+_EMBED_WORKERS = 4  # parallel Ollama embedding calls per batch
+
+
+def _embed_one(chunk: dict) -> list[float]:
+    return ollama.embeddings(model=config.EMBED_MODEL, prompt=chunk["document"])["embedding"]
 
 
 def embed_and_load(chunks: list[dict], collection) -> None:
     """
-    Embed chunks in small batches and add each batch to Chroma immediately.
-    This avoids holding all embeddings in memory at once.
+    Embed chunks in parallel within each batch, then write the batch to Chroma.
+    Parallelism keeps the GPU busy between requests; batch cap keeps RAM bounded.
     """
     total = len(chunks)
-    logger.info("Embedding + loading %d chunks (batch=%d)...", total, _BATCH_SIZE)
+    logger.info(
+        "Embedding + loading %d chunks (batch=%d, workers=%d)...",
+        total, _BATCH_SIZE, _EMBED_WORKERS,
+    )
 
     for batch_start in range(0, total, _BATCH_SIZE):
         batch = chunks[batch_start : batch_start + _BATCH_SIZE]
-        embeddings = [
-            ollama.embeddings(model=config.EMBED_MODEL, prompt=c["document"])["embedding"]
-            for c in batch
-        ]
+        with ThreadPoolExecutor(max_workers=_EMBED_WORKERS) as pool:
+            embeddings = list(pool.map(_embed_one, batch))
         collection.add(
             ids=[c["id"] for c in batch],
             documents=[c["document"] for c in batch],
