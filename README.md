@@ -67,6 +67,13 @@ interview_agent/
     chroma_db/          # vector store
     history.db          # topic history
 
+  tests/
+    test_ingest.py      # chunking logic, parse_chunks, chunk IDs
+    test_agent.py       # JSON parsing, retrieval, generation (mocked)
+    test_memory.py      # SQLite recency window, LRU rotation (real DB)
+    test_email_sender.py # HTML builder, SMTP send (mocked)
+    test_run_daily.py   # topic-picking logic
+
   docs/
     PROJECT_SPEC.md     # full architecture and design decisions
 ```
@@ -123,7 +130,17 @@ python pipeline/ingest.py
 
 This parses the document, generates embeddings, and loads everything into ChromaDB. Run once, or re-run whenever the source doc changes.
 
-### 5. Test the full pipeline
+### 5. Run the test suite
+
+Before touching Ollama or your inbox, validate all core logic without any external dependencies:
+
+```bash
+python -m pytest tests/ -v
+```
+
+The tests cover chunking, JSON parsing, topic rotation, and email building — all with mocked LLM and SMTP calls. A clean run here means the pipeline logic is sound before you commit to a full end-to-end run.
+
+### 7. Test the full pipeline
 
 ```bash
 python run_daily.py --dry-run
@@ -131,13 +148,13 @@ python run_daily.py --dry-run
 
 Skips sending email and prints the generated anecdote + question to stdout instead.
 
-### 6. Send a test email
+### 8. Send a test email
 
 ```bash
 python pipeline/email_sender.py
 ```
 
-### 7. Automate with Windows Task Scheduler
+### 9. Automate with Windows Task Scheduler
 
 Open **Task Scheduler** on Windows → **Create Basic Task** → name it `Interview Agent`.
 
