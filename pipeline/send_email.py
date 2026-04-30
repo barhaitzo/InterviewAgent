@@ -1,8 +1,4 @@
-"""
-SMTP email sender via Gmail App Password.
-
-Run: python send_email.py  (sends a [TEST] email to yourself)
-"""
+"""SMTP email delivery via Gmail App Password."""
 import logging
 import os
 import smtplib
@@ -15,13 +11,45 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 
-def _build_email_html(anecdote: str, question: str, topic: str) -> str:
-    return f"""<!DOCTYPE html>
+class EmailSender:
+    def __init__(self) -> None:
+        load_dotenv()
+        self.host = os.environ["SMTP_HOST"]
+        self.port = int(os.environ["SMTP_PORT"])
+        self.user = os.environ["SMTP_USER"]
+        self.password = os.environ["SMTP_APP_PASSWORD"]
+        self.to = os.environ["EMAIL_TO"]
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def send(self, subject: str, body_html: str, body_text: str | None = None) -> None:
+        """Send via Gmail SMTP with STARTTLS. body_text is a plain-text fallback."""
+        if body_text is None:
+            body_text = body_html
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = self.user
+        msg["To"] = self.to
+        msg.attach(MIMEText(body_text, "plain", "utf-8"))
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+        with smtplib.SMTP(self.host, self.port) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(self.user, self.password)
+            smtp.sendmail(self.user, [self.to], msg.as_string())
+
+        logger.info("Email sent to %s", self.to)
+
+    @staticmethod
+    def build_html(anecdote: str, question: str, topic: str) -> str:
+        return f"""<!DOCTYPE html>
 <html lang="en">
 <body style="font-family: Georgia, serif; max-width: 620px; margin: 40px auto; color: #1a1a1a; line-height: 1.75;">
   <p style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 2px;">
@@ -48,39 +76,10 @@ def _build_email_html(anecdote: str, question: str, topic: str) -> str:
 </html>"""
 
 
-def send(subject: str, body_html: str, body_text: str | None = None) -> None:
-    """
-    Send an email via Gmail SMTP (App Password auth).
-    Reads credentials from .env: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_APP_PASSWORD, EMAIL_TO.
-    """
-    host = os.environ["SMTP_HOST"]
-    port = int(os.environ["SMTP_PORT"])
-    user = os.environ["SMTP_USER"]
-    password = os.environ["SMTP_APP_PASSWORD"]
-    to = os.environ["EMAIL_TO"]
-
-    if body_text is None:
-        body_text = body_html
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = to
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
-    msg.attach(MIMEText(body_html, "html", "utf-8"))
-
-    with smtplib.SMTP(host, port) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.login(user, password)
-        smtp.sendmail(user, [to], msg.as_string())
-
-    logger.info("Email sent to %s", to)
-
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    send(
+    sender = EmailSender()
+    sender.send(
         subject="[TEST] Interview Agent — Daily Prep",
         body_html="<p>This is a test email from the interview agent. If you see this, SMTP is working.</p>",
         body_text="This is a test email from the interview agent.",

@@ -1,3 +1,6 @@
-from pipeline import agent, ingest, memory, send_email
+from pipeline.agent import Agent, AgentOutput
+from pipeline.ingest import Ingester
+from pipeline.memory import Memory
+from pipeline.send_email import EmailSender
 
-__all__ = ["agent", "ingest", "memory", "send_email"]
+__all__ = ["Agent", "AgentOutput", "Ingester", "Memory", "EmailSender"]
