@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data stores (auto-created at runtime)
+chroma_db/
+history.db
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
