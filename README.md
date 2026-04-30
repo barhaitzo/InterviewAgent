@@ -19,7 +19,7 @@ Windows Task Scheduler (10am & 14pm)
         ↓ embeds topic → queries ChromaDB → retrieves top-3 chunks
    Ollama (qwen2.5:7b)
         ↓ generates JSON {anecdote, question}
-   pipeline/send_email.py
+   pipeline/email_sender.py
         ↓ Gmail SMTP
    Your inbox
 ```
@@ -58,7 +58,7 @@ interview_agent/
     ingest.py           # markdown → chunks → ChromaDB
     agent.py            # retrieve + generate + parse
     memory.py           # SQLite read/write, topic rotation
-    send_email.py       # SMTP delivery
+    email_sender.py       # SMTP delivery
 
   data/
     crash_course.md     # source document (swap to change interview topic)
@@ -130,7 +130,7 @@ Skips sending email and prints the generated anecdote + question to stdout inste
 ### 6. Send a test email
 
 ```bash
-python pipeline/send_email.py
+python pipeline/email_sender.py
 ```
 
 ### 7. Automate with Windows Task Scheduler
