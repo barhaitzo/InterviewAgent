@@ -54,7 +54,13 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         self.gen_provider = gen_provider.lower()
         self.top_k = top_k
         self._client = chromadb.PersistentClient(path=str(chroma_path))
-        self._collection = self._client.get_collection(collection_name)
+        try:
+            self._collection = self._client.get_collection(collection_name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"ChromaDB collection '{collection_name}' not found. "
+                "Run 'python pipeline/ingest.py' first."
+            ) from exc
 
     # ------------------------------------------------------------------
     # Internal — parsing
@@ -84,12 +90,17 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
     # ------------------------------------------------------------------
 
     def _call_ollama(self, messages: list[dict], temperature: float = 0.4) -> str:
-        resp = ollama.chat(
-            model=self.gen_model,
-            messages=messages,
-            options={"temperature": temperature},
-        )
-        return resp.message.content
+        try:
+            resp = ollama.chat(
+                model=self.gen_model,
+                messages=messages,
+                options={"temperature": temperature},
+            )
+            return resp.message.content
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ollama generation failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+            ) from exc
 
     def _call_anthropic(self, messages: list[dict], temperature: float = 0.4) -> str:
         try:
@@ -139,7 +150,7 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
                 temperature=temperature,
             )
             return resp.choices[0].message.content
-        except (_openai.AuthenticationError, _openai.RateLimitError) as exc:
+        except _openai.APIError as exc:
             logger.warning("OpenAI API unavailable (%s) — falling back to Ollama.", exc)
             return self._call_ollama(messages, temperature)
 
@@ -169,7 +180,12 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
 
     def retrieve(self, topic: str) -> tuple[list[str], list[str]]:
         """Embed topic, query Chroma with topic filter. Returns (documents, chunk_ids)."""
-        resp = ollama.embeddings(model=self.embed_model, prompt=topic)
+        try:
+            resp = ollama.embeddings(model=self.embed_model, prompt=topic)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ollama embedding failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+            ) from exc
         results = self._collection.query(
             query_embeddings=[resp["embedding"]],
             n_results=self.top_k,

@@ -139,14 +139,19 @@ class Ingester:
     # ------------------------------------------------------------------
 
     def _embed_one(self, chunk: dict) -> list[float]:
-        return ollama.embeddings(model=self.embed_model, prompt=chunk["document"])["embedding"]
+        try:
+            return ollama.embeddings(model=self.embed_model, prompt=chunk["document"])["embedding"]
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ollama embedding failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+            ) from exc
 
     def _init_collection(self):
         try:
             self._client.delete_collection(self.collection_name)
             logger.info("Dropped existing '%s' collection.", self.collection_name)
         except Exception:
-            pass
+            logger.debug("Collection '%s' did not exist — creating fresh.", self.collection_name)
         return self._client.create_collection(
             name=self.collection_name,
             metadata={"hnsw:space": "cosine"},
@@ -161,8 +166,15 @@ class Ingester:
         )
         for batch_start in range(0, total, self.batch_size):
             batch = chunks[batch_start : batch_start + self.batch_size]
-            with ThreadPoolExecutor(max_workers=self.embed_workers) as pool:
-                embeddings = list(pool.map(self._embed_one, batch))
+            try:
+                with ThreadPoolExecutor(max_workers=self.embed_workers) as pool:
+                    embeddings = list(pool.map(self._embed_one, batch))
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Embedding batch {batch_start}–{batch_start + len(batch)} failed: {exc}"
+                ) from exc
             collection.add(
                 ids=[c["id"] for c in batch],
                 documents=[c["document"] for c in batch],

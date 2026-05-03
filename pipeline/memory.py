@@ -28,6 +28,7 @@ class Memory:
     # ------------------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
@@ -66,6 +67,8 @@ class Memory:
 
     def get_lru_topic(self, all_topics: list[str]) -> str:
         """Return the topic with the oldest last-sent timestamp (never-sent topics first)."""
+        if not all_topics:
+            raise ValueError("all_topics must not be empty.")
         with self._connect() as conn:
             placeholders = ",".join("?" * len(all_topics))
             rows = conn.execute(
@@ -85,19 +88,24 @@ class Memory:
         model: str = config.GEN_MODEL,
     ) -> None:
         """Insert a row recording today's send."""
-        with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO sent_anecdotes "
-                "(timestamp, topic, chunk_ids_used, anecdote_text, question_text, model_used) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    datetime.now(timezone.utc).isoformat(),
-                    topic,
-                    json.dumps(chunk_ids),
-                    anecdote,
-                    question,
-                    model,
-                ),
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO sent_anecdotes "
+                    "(timestamp, topic, chunk_ids_used, anecdote_text, question_text, model_used) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        datetime.now(timezone.utc).isoformat(),
+                        topic,
+                        json.dumps(chunk_ids),
+                        anecdote,
+                        question,
+                        model,
+                    ),
+                )
+        except sqlite3.Error as exc:
+            logger.error(
+                "Failed to log run to history DB (%s) — this topic may repeat next cycle.", exc
             )
 
 

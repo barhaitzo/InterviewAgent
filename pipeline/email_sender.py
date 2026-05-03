@@ -13,10 +13,18 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+_REQUIRED_ENV_VARS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_APP_PASSWORD", "EMAIL_TO")
+
 
 class EmailSender:
     def __init__(self) -> None:
         load_dotenv()
+        missing = [v for v in _REQUIRED_ENV_VARS if not os.environ.get(v)]
+        if missing:
+            raise EnvironmentError(
+                f"Missing required environment variables: {', '.join(missing)}. "
+                "Check your .env file."
+            )
         self.host = os.environ["SMTP_HOST"]
         self.port = int(os.environ["SMTP_PORT"])
         self.user = os.environ["SMTP_USER"]
@@ -39,11 +47,22 @@ class EmailSender:
         msg.attach(MIMEText(body_text, "plain", "utf-8"))
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-        with smtplib.SMTP(self.host, self.port) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.login(self.user, self.password)
-            smtp.sendmail(self.user, [self.to], msg.as_string())
+        try:
+            with smtplib.SMTP(self.host, self.port) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.login(self.user, self.password)
+                smtp.sendmail(self.user, [self.to], msg.as_string())
+        except smtplib.SMTPAuthenticationError as exc:
+            raise RuntimeError(
+                "SMTP authentication failed — check SMTP_USER and SMTP_APP_PASSWORD in .env."
+            ) from exc
+        except smtplib.SMTPException as exc:
+            raise RuntimeError(f"Failed to send email: {exc}") from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"Could not connect to SMTP server {self.host}:{self.port} — {exc}"
+            ) from exc
 
         logger.info("Email sent to %s", self.to)
 

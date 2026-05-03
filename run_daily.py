@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 def pick_topic(agent: Agent, memory: Memory) -> str:
     """Pick a topic not sent within RECENCY_DAYS; fall back to LRU when all are covered."""
     all_topics = agent.get_all_topics()
+    if not all_topics:
+        raise RuntimeError(
+            "No topics found in ChromaDB — run 'python pipeline/ingest.py' first."
+        )
+
     recent = set(memory.get_recent_topics())
     available = [t for t in all_topics if t not in recent]
 
@@ -32,41 +37,47 @@ def pick_topic(agent: Agent, memory: Memory) -> str:
 def main(dry_run: bool = False) -> None:
     logger.info("=== Daily run started (dry_run=%s) ===", dry_run)
 
-    agent = Agent()
-    memory = Memory()
+    try:
+        agent = Agent()
+        memory = Memory()
 
-    topic = pick_topic(agent, memory)
-    logger.info("Selected topic: %s", topic)
+        topic = pick_topic(agent, memory)
+        logger.info("Selected topic: %s", topic)
 
-    output, chunk_ids = agent.run(topic)
-    logger.info(
-        "Generated — anecdote: %d chars, question: %d chars",
-        len(output.anecdote),
-        len(output.question),
-    )
-
-    if dry_run:
-        print("\n--- DRY RUN OUTPUT ---")
-        print(f"Topic:    {topic}")
-        print(f"\nAnecdote: {output.anecdote}")
-        print(f"\nQuestion: {output.question}")
-        print(f"\nChunks:   {chunk_ids}")
-        print("--- (email not sent) ---\n")
-    else:
-        sender = EmailSender()
-        sender.send(
-            subject=f"Interview Prep — {topic}",
-            body_html=EmailSender.build_html(output.anecdote, output.question, topic),
-            body_text=f"{output.anecdote}\n\n{output.question}",
+        output, chunk_ids = agent.run(topic)
+        logger.info(
+            "Generated — anecdote: %d chars, question: %d chars",
+            len(output.anecdote),
+            len(output.question),
         )
-        logger.info("Email sent.")
 
-    memory.log_run(
-        topic=topic,
-        chunk_ids=chunk_ids,
-        anecdote=output.anecdote,
-        question=output.question,
-    )
+        if dry_run:
+            print("\n--- DRY RUN OUTPUT ---")
+            print(f"Topic:    {topic}")
+            print(f"\nAnecdote: {output.anecdote}")
+            print(f"\nQuestion: {output.question}")
+            print(f"\nChunks:   {chunk_ids}")
+            print("--- (email not sent) ---\n")
+        else:
+            sender = EmailSender()
+            sender.send(
+                subject=f"Interview Prep — {topic}",
+                body_html=EmailSender.build_html(output.anecdote, output.question, topic),
+                body_text=f"{output.anecdote}\n\n{output.question}",
+            )
+            logger.info("Email sent.")
+
+        memory.log_run(
+            topic=topic,
+            chunk_ids=chunk_ids,
+            anecdote=output.anecdote,
+            question=output.question,
+        )
+
+    except Exception:
+        logger.exception("=== Daily run FAILED ===")
+        raise
+
     logger.info("=== Daily run complete ===")
 
 
