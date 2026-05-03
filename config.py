@@ -1,14 +1,12 @@
 from pathlib import Path
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-GEN_MODEL = "qwen2.5:7b"
+GEN_MODEL = "llama3.1:8b"
 EMBED_MODEL = "nomic-embed-text"
 
-# Generation provider: "anthropic", "openai", or "ollama"
-# Falls back to Ollama automatically if the API key is missing or invalid.
-GEN_PROVIDER = "ollama"
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
-OPENAI_MODEL = "gpt-4o"
+# Agentic mode: LLM calls retrieve() as a tool instead of receiving pre-fetched chunks.
+AGENTIC = True
+MAX_TOOL_CALLS = 5  # safety cap on retrieval iterations per run
 
 CHUNK_SIZE = 500        # approximate tokens per chunk
 CHUNK_OVERLAP = 50      # approximate token overlap between chunks

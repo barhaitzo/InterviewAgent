@@ -1,7 +1,5 @@
 """Retrieval-augmented generation agent: retrieve chunks, call LLM, parse output."""
-import json
 import logging
-import os
 import sys
 import threading
 from pathlib import Path
@@ -10,12 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chromadb
 import ollama
-from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 
 import config
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +21,7 @@ class AgentOutput(BaseModel):
 
 
 class Agent:
+
     SYSTEM_PROMPT = """\
 You are an interview prep assistant. Given excerpts from a personal ML system design \
 crash course, produce ONE concise concept refresher (3-5 sentences) and ONE thoughtful \
@@ -40,19 +36,56 @@ Constraints:
 Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
 """
 
+    AGENTIC_SYSTEM_PROMPT = """\
+You are an interview prep assistant with access to a retrieve tool that searches a \
+personal ML system design crash course.
+
+Given a topic, use retrieve() to gather relevant excerpts, then produce:
+- ONE concept refresher (3–5 sentences, tight and memorable)
+- ONE open-ended interview question
+
+Instructions:
+- Call retrieve 1–3 times with specific, focused queries to gather what you need.
+- Ground both outputs strictly in retrieved content — no invented facts.
+- When ready, output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
+"""
+
+    RETRIEVE_TOOL = {
+        "type": "function",
+        "function": {
+            "name": "retrieve",
+            "description": (
+                "Search the study material for relevant excerpts. "
+                "Use a focused query to find content about a specific aspect of the topic."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "A specific search query to find relevant study material.",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
     def __init__(
         self,
         chroma_path: Path = config.CHROMA_PATH,
         collection_name: str = config.COLLECTION_NAME,
         embed_model: str = config.EMBED_MODEL,
         gen_model: str = config.GEN_MODEL,
-        gen_provider: str = config.GEN_PROVIDER,
         top_k: int = config.TOP_K,
+        agentic: bool = config.AGENTIC,
+        max_tool_calls: int = config.MAX_TOOL_CALLS,
     ) -> None:
         self.embed_model = embed_model
         self.gen_model = gen_model
-        self.gen_provider = gen_provider.lower()
         self.top_k = top_k
+        self.agentic = agentic
+        self.max_tool_calls = max_tool_calls
         self._client = chromadb.PersistentClient(path=str(chroma_path))
         try:
             self._collection = self._client.get_collection(collection_name)
@@ -62,23 +95,6 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
                 "Run 'python pipeline/ingest.py' first."
             ) from exc
 
-    # ------------------------------------------------------------------
-    # Internal — parsing
-    # ------------------------------------------------------------------
-
-    def _parse_output(self, raw: str) -> AgentOutput:
-        """Strip markdown code fences if present, then parse JSON into AgentOutput."""
-        text = raw.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-            text = "\n".join(inner).strip()
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start != -1 and end > start:
-            text = text[start:end]
-        return AgentOutput(**json.loads(text))
-
     def _heartbeat(self, stop: threading.Event, interval: int = 15) -> None:
         elapsed = 0
         while not stop.wait(interval):
@@ -86,81 +102,89 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
             logger.info("  ... LLM still generating (%ds elapsed)", elapsed)
 
     # ------------------------------------------------------------------
-    # Internal — provider dispatch
+    # Internal — tool execution
     # ------------------------------------------------------------------
 
-    def _call_ollama(self, messages: list[dict], temperature: float = 0.4) -> str:
+    def _retrieve_for_tool(self, query: str) -> tuple[str, list[str]]:
+        """Execute a retrieve tool call. No topic filter — free-form semantic search."""
         try:
-            resp = ollama.chat(
-                model=self.gen_model,
-                messages=messages,
-                options={"temperature": temperature},
-            )
-            return resp.message.content
+            resp = ollama.embeddings(model=self.embed_model, prompt=query)
         except Exception as exc:
             raise RuntimeError(
-                f"Ollama generation failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+                f"Ollama embedding failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
             ) from exc
+        results = self._collection.query(
+            query_embeddings=[resp["embedding"]],
+            n_results=self.top_k,
+        )
+        docs = results["documents"][0]
+        ids = results["ids"][0]
+        formatted = "\n\n---\n\n".join(
+            f"[{cid}]\n{doc}" for cid, doc in zip(ids, docs)
+        )
+        return formatted, ids
 
-    def _call_anthropic(self, messages: list[dict], temperature: float = 0.4) -> str:
-        try:
-            import anthropic as _anthropic
-        except ImportError:
-            logger.warning("anthropic package not installed — falling back to Ollama.")
-            return self._call_ollama(messages, temperature)
+    # ------------------------------------------------------------------
+    # Internal — agentic loop
+    # ------------------------------------------------------------------
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            logger.warning("ANTHROPIC_API_KEY not set — falling back to Ollama.")
-            return self._call_ollama(messages, temperature)
+    def _agentic_run(self, topic: str) -> tuple[AgentOutput, list[str]]:
+        messages: list[dict] = [
+            {"role": "system", "content": self.AGENTIC_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Topic: {topic}"},
+        ]
+        all_chunk_ids: list[str] = []
+        retrieved_contexts: list[str] = []
 
-        try:
-            client = _anthropic.Anthropic(api_key=api_key)
-            system = next((m["content"] for m in messages if m["role"] == "system"), "")
-            user_messages = [m for m in messages if m["role"] != "system"]
-            resp = client.messages.create(
-                model=config.ANTHROPIC_MODEL,
-                max_tokens=1024,
-                system=system,
-                messages=user_messages,
-                temperature=temperature,
-            )
-            return resp.content[0].text
-        except _anthropic.APIError as exc:
-            logger.warning("Anthropic API unavailable (%s) — falling back to Ollama.", exc)
-            return self._call_ollama(messages, temperature)
+        for _ in range(self.max_tool_calls):
+            try:
+                resp = ollama.chat(
+                    model=self.gen_model,
+                    messages=messages,
+                    tools=[self.RETRIEVE_TOOL],
+                    options={"temperature": 0.4},
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Ollama agentic call failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+                ) from exc
 
-    def _call_openai(self, messages: list[dict], temperature: float = 0.4) -> str:
-        try:
-            import openai as _openai
-        except ImportError:
-            logger.warning("openai package not installed — falling back to Ollama.")
-            return self._call_ollama(messages, temperature)
+            if not resp.message.tool_calls:
+                try:
+                    return AgentOutput.model_validate_json(resp.message.content), all_chunk_ids
+                except ValidationError:
+                    # Output wasn't valid — re-ask with schema enforcement
+                    logger.warning("Agentic output failed validation — retrying with format constraint.")
+                    messages.append({"role": "assistant", "content": resp.message.content or ""})
+                    messages.append({"role": "user", "content": "Now produce the output as structured JSON."})
+                    final = ollama.chat(
+                        model=self.gen_model,
+                        messages=messages,
+                        format=AgentOutput.model_json_schema(),
+                        options={"temperature": 0.2},
+                    )
+                    return AgentOutput.model_validate_json(final.message.content), all_chunk_ids
 
-        api_key = os.environ.get("OPENAI_API_KEY", "")
-        if not api_key:
-            logger.warning("OPENAI_API_KEY not set — falling back to Ollama.")
-            return self._call_ollama(messages, temperature)
+            messages.append({
+                "role": "assistant",
+                "content": resp.message.content or "",
+                "tool_calls": [
+                    {"function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in resp.message.tool_calls
+                ],
+            })
+            for tc in resp.message.tool_calls:
+                query = tc.function.arguments.get("query", "")
+                logger.info("  [tool] retrieve(%r)", query)
+                result, ids = self._retrieve_for_tool(query)
+                all_chunk_ids.extend(ids)
+                retrieved_contexts.append(result)
+                messages.append({"role": "tool", "content": result})
 
-        try:
-            client = _openai.OpenAI(api_key=api_key)
-            resp = client.chat.completions.create(
-                model=config.OPENAI_MODEL,
-                messages=messages,
-                temperature=temperature,
-            )
-            return resp.choices[0].message.content
-        except _openai.APIError as exc:
-            logger.warning("OpenAI API unavailable (%s) — falling back to Ollama.", exc)
-            return self._call_ollama(messages, temperature)
-
-    def _call_provider(self, messages: list[dict], temperature: float = 0.4) -> str:
-        """Dispatch to the configured provider, falling back to Ollama on failure."""
-        if self.gen_provider == "anthropic":
-            return self._call_anthropic(messages, temperature)
-        if self.gen_provider == "openai":
-            return self._call_openai(messages, temperature)
-        return self._call_ollama(messages, temperature)
+        logger.warning(
+            "Max tool calls (%d) reached — falling back to direct generation.", self.max_tool_calls
+        )
+        return self.generate(topic, retrieved_contexts), all_chunk_ids
 
     # ------------------------------------------------------------------
     # Public API
@@ -194,7 +218,7 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         return results["documents"][0], results["ids"][0]
 
     def generate(self, topic: str, documents: list[str]) -> AgentOutput:
-        """Call the configured LLM provider, parse JSON output. Retries once on parse failure."""
+        """Call Ollama with schema-enforced structured output."""
         context = "\n\n---\n\n".join(documents)
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -204,31 +228,34 @@ Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
         stop = threading.Event()
         threading.Thread(target=self._heartbeat, args=(stop,), daemon=True).start()
         try:
-            raw = self._call_provider(messages, temperature=0.4)
+            resp = ollama.chat(
+                model=self.gen_model,
+                messages=messages,
+                format=AgentOutput.model_json_schema(),
+                options={"temperature": 0.4},
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Ollama generation failed — is Ollama running at {config.OLLAMA_BASE_URL}? ({exc})"
+            ) from exc
         finally:
             stop.set()
 
-        try:
-            return self._parse_output(raw)
-        except (json.JSONDecodeError, ValidationError, KeyError) as exc:
-            logger.warning("Parse failed (%s) — retrying.", exc)
-            messages += [
-                {"role": "assistant", "content": raw},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Your previous output was invalid. Error: {exc}\n"
-                        'Output ONLY valid JSON: {"anecdote": "...", "question": "..."}'
-                    ),
-                },
-            ]
-            raw2 = self._call_provider(messages, temperature=0.2)
-            return self._parse_output(raw2)
+        return AgentOutput.model_validate_json(resp.message.content)
 
     def run(self, topic: str) -> tuple[AgentOutput, list[str]]:
-        """Full retrieve → generate pipeline. Returns (output, chunk_ids_used)."""
+        """Full pipeline. Agentic: LLM retrieves via tool calls. Non-agentic: pre-fetched chunks."""
+        if self.agentic:
+            logger.info("Agentic mode — LLM will decide what to retrieve.")
+            stop = threading.Event()
+            threading.Thread(target=self._heartbeat, args=(stop,), daemon=True).start()
+            try:
+                return self._agentic_run(topic)
+            finally:
+                stop.set()
+
         documents, chunk_ids = self.retrieve(topic)
-        logger.info("Retrieved %d chunks. Calling LLM (%s)...", len(documents), self.gen_provider)
+        logger.info("Retrieved %d chunks. Calling LLM...", len(documents))
         output = self.generate(topic, documents)
         return output, chunk_ids
 
@@ -237,7 +264,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     agent = Agent()
     test_topic = "Phase 3 — Data & Features (~10 min, high priority)"
+    print(f"Mode  : {'agentic (LLM chooses queries)' if agent.agentic else 'non-agentic (pre-fetched chunks)'}")
+    print(f"Model : {agent.gen_model}")
+    print()
     output, chunk_ids = agent.run(test_topic)
     print(f"Anecdote:\n{output.anecdote}\n")
     print(f"Question:\n{output.question}\n")
-    print(f"Chunks used: {chunk_ids}")
+    label = "Chunks LLM retrieved" if agent.agentic else "Chunks used"
+    print(f"{label}: {chunk_ids}")

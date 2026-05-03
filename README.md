@@ -15,17 +15,18 @@ Windows Task Scheduler (10am & 14pm)
         ↓
    run_daily.py
         ↓ picks an unseen topic from SQLite history
-   pipeline/agent.py
-        ↓ embeds topic → queries ChromaDB → retrieves top-3 chunks
-   Ollama (qwen2.5:7b)
+   pipeline/agent.py  (agentic loop)
+        ↓ LLM calls retrieve() tool → ChromaDB → top-3 chunks
+   Ollama (llama3.1:8b)
         ↓ generates JSON {anecdote, question}
    pipeline/email_sender.py
         ↓ Gmail SMTP
    Your inbox
 ```
 
+- **Agentic loop:** LLM decides what to search for and calls `retrieve()` as a tool 1–3 times
 - **RAG layer:** ChromaDB (cosine similarity, persistent) + `nomic-embed-text` embeddings
-- **Generation:** `qwen2.5:7b` via Ollama — runs fully locally on Windows host
+- **Generation:** `llama3.1:8b` via Ollama — runs fully locally on Windows host
 - **Memory:** SQLite tracks sent topics; avoids repeats within a 14-day window
 - **Delivery:** Gmail SMTP with App Password auth
 
@@ -37,7 +38,7 @@ Windows Task Scheduler (10am & 14pm)
 |---|---|
 | Language | Python 3.11+ |
 | LLM runtime | Ollama (Windows host, WSL-accessible at `localhost:11434`) |
-| Generation model | `qwen2.5:7b` |
+| Generation model | `llama3.1:8b` |
 | Embedding model | `nomic-embed-text` |
 | Vector store | ChromaDB (file-based) |
 | History store | SQLite (`stdlib`) |
@@ -92,7 +93,7 @@ interview_agent/
 - [Ollama](https://ollama.com) installed on Windows with these models pulled:
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
@@ -219,21 +220,11 @@ All tunable settings live in `config.py`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `GEN_MODEL` | `qwen2.5:7b` | Ollama generation model (used when `GEN_PROVIDER = "ollama"`) |
-| `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model (always local) |
-| `GEN_PROVIDER` | `ollama` | Generation provider: `"ollama"`, `"anthropic"`, or `"openai"` |
-| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` | Anthropic model (used when `GEN_PROVIDER = "anthropic"`) |
-| `OPENAI_MODEL` | `gpt-4o` | OpenAI model (used when `GEN_PROVIDER = "openai"`) |
+| `GEN_MODEL` | `llama3.1:8b` | Ollama generation model |
+| `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model |
+| `AGENTIC` | `True` | Agentic mode: LLM calls `retrieve()` as a tool |
+| `MAX_TOOL_CALLS` | `5` | Safety cap on retrieval iterations per run |
 | `CHUNK_SIZE` | `500` | Approximate tokens per chunk |
-| `TOP_K` | `3` | Chunks retrieved per topic |
+| `TOP_K` | `3` | Chunks retrieved per query |
 | `RECENCY_DAYS` | `14` | Topic repeat window (days) |
 | `COLLECTION_NAME` | `ml_system_design` | ChromaDB collection name |
-
-To use an API provider, set `GEN_PROVIDER` in `config.py` and add the key to `.env`:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-```
-
-If the key is missing, invalid, or the quota is exhausted, the pipeline falls back to Ollama automatically. Embeddings always run locally via Ollama regardless of provider.

@@ -1,4 +1,3 @@
-import json
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -9,11 +8,11 @@ from pipeline.agent import Agent, AgentOutput
 
 @pytest.fixture
 def mock_agent(tmp_path: Path) -> Agent:
-    """Agent with fully mocked ChromaDB — no real files needed."""
+    """Agent with fully mocked ChromaDB — no real files needed. Always non-agentic."""
     mock_collection = MagicMock()
     with patch("chromadb.PersistentClient") as mock_client:
         mock_client.return_value.get_collection.return_value = mock_collection
-        agent = Agent(chroma_path=tmp_path / "chroma", collection_name="test")
+        agent = Agent(chroma_path=tmp_path / "chroma", collection_name="test", agentic=False)
     agent._collection = mock_collection
     return agent
 
@@ -22,46 +21,6 @@ def _chat_response(content: str) -> MagicMock:
     resp = MagicMock()
     resp.message.content = content
     return resp
-
-
-# ---------------------------------------------------------------------------
-# _parse_output
-# ---------------------------------------------------------------------------
-
-class TestParseOutput:
-    VALID = '{"anecdote": "foo bar", "question": "why baz?"}'
-
-    def test_clean_json(self, mock_agent):
-        out = mock_agent._parse_output(self.VALID)
-        assert out.anecdote == "foo bar"
-        assert out.question == "why baz?"
-
-    def test_strips_json_fenced_block(self, mock_agent):
-        raw = f"```json\n{self.VALID}\n```"
-        assert mock_agent._parse_output(raw).anecdote == "foo bar"
-
-    def test_strips_plain_fenced_block(self, mock_agent):
-        raw = f"```\n{self.VALID}\n```"
-        assert mock_agent._parse_output(raw).anecdote == "foo bar"
-
-    def test_extracts_json_from_surrounding_prose(self, mock_agent):
-        raw = f"Sure! Here you go:\n{self.VALID}\nHope that helps."
-        assert mock_agent._parse_output(raw).anecdote == "foo bar"
-
-    def test_returns_agent_output_type(self, mock_agent):
-        assert isinstance(mock_agent._parse_output(self.VALID), AgentOutput)
-
-    def test_invalid_json_raises(self, mock_agent):
-        with pytest.raises((json.JSONDecodeError, KeyError, ValidationError)):
-            mock_agent._parse_output("not json at all")
-
-    def test_missing_question_field_raises(self, mock_agent):
-        with pytest.raises((ValidationError, KeyError)):
-            mock_agent._parse_output('{"anecdote": "foo"}')
-
-    def test_missing_anecdote_field_raises(self, mock_agent):
-        with pytest.raises((ValidationError, KeyError)):
-            mock_agent._parse_output('{"question": "q?"}')
 
 
 # ---------------------------------------------------------------------------
@@ -138,13 +97,11 @@ class TestGenerate:
         assert isinstance(out, AgentOutput)
         assert out.anecdote == "concept refresher"
 
-    def test_retries_once_on_bad_json(self, mock_agent):
-        good = '{"anecdote": "retry worked", "question": "q?"}'
-        responses = [_chat_response("not json"), _chat_response(good)]
-        with patch("ollama.chat", side_effect=responses) as mock_chat:
-            out = mock_agent.generate("topic", ["chunk1"])
-        assert mock_chat.call_count == 2
-        assert out.anecdote == "retry worked"
+    def test_schema_format_passed_to_ollama(self, mock_agent):
+        with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)) as mock_chat:
+            mock_agent.generate("topic", ["chunk1"])
+        kwargs = mock_chat.call_args[1]
+        assert kwargs["format"] == AgentOutput.model_json_schema()
 
     def test_documents_included_in_user_message(self, mock_agent):
         with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)) as mock_chat:
@@ -153,3 +110,99 @@ class TestGenerate:
         user_msg = next(m for m in messages if m["role"] == "user")
         assert "important chunk" in user_msg["content"]
         assert "mytopic" in user_msg["content"]
+
+
+# ---------------------------------------------------------------------------
+# run() — mode dispatch
+# ---------------------------------------------------------------------------
+
+class TestRun:
+    VALID_PAYLOAD = '{"anecdote": "refresher", "question": "q?"}'
+
+    def test_non_agentic_uses_retrieve_and_generate(self, mock_agent, tmp_path):
+        mock_agent._collection.query.return_value = {
+            "documents": [["doc1"]], "ids": [["id1"]]
+        }
+        with patch("ollama.embeddings", return_value={"embedding": [0.1]}), \
+             patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)):
+            output, chunk_ids = mock_agent.run("Feature Stores")
+        assert output.anecdote == "refresher"
+        assert chunk_ids == ["id1"]
+
+    def test_agentic_mode_dispatches_to_agentic_run(self, tmp_path):
+        mock_collection = MagicMock()
+        with patch("chromadb.PersistentClient") as mock_client:
+            mock_client.return_value.get_collection.return_value = mock_collection
+            agent = Agent(
+                chroma_path=tmp_path / "chroma",
+                collection_name="test",
+                agentic=True,
+            )
+        agent._collection = mock_collection
+
+        expected = (AgentOutput(anecdote="a", question="q?"), ["id1"])
+        with patch.object(agent, "_agentic_run", return_value=expected) as mock_ar:
+            output, ids = agent.run("Feature Stores")
+        mock_ar.assert_called_once_with("Feature Stores")
+        assert output.anecdote == "a"
+
+    def test_agentic_run_calls_retrieve_tool(self, tmp_path):
+        mock_collection = MagicMock()
+        mock_collection.query.return_value = {
+            "documents": [["chunk text"]], "ids": [["id1"]]
+        }
+        with patch("chromadb.PersistentClient") as mock_client:
+            mock_client.return_value.get_collection.return_value = mock_collection
+            agent = Agent(
+                chroma_path=tmp_path / "chroma",
+                collection_name="test",
+                agentic=True,
+            )
+        agent._collection = mock_collection
+
+        # First response: tool call; second response: final answer
+        tool_call = MagicMock()
+        tool_call.function.name = "retrieve"
+        tool_call.function.arguments = {"query": "feature store architecture"}
+
+        first_resp = MagicMock()
+        first_resp.message.tool_calls = [tool_call]
+        first_resp.message.content = ""
+
+        final_resp = MagicMock()
+        final_resp.message.tool_calls = None
+        final_resp.message.content = self.VALID_PAYLOAD
+
+        with patch("ollama.embeddings", return_value={"embedding": [0.1]}), \
+             patch("ollama.chat", side_effect=[first_resp, final_resp]):
+            output, ids = agent._agentic_run("Feature Stores")
+
+        assert output.anecdote == "refresher"
+        assert "id1" in ids
+
+    def test_agentic_run_retries_with_format_on_invalid_output(self, tmp_path):
+        mock_collection = MagicMock()
+        with patch("chromadb.PersistentClient") as mock_client:
+            mock_client.return_value.get_collection.return_value = mock_collection
+            agent = Agent(
+                chroma_path=tmp_path / "chroma",
+                collection_name="test",
+                agentic=True,
+            )
+        agent._collection = mock_collection
+
+        bad_resp = MagicMock()
+        bad_resp.message.tool_calls = None
+        bad_resp.message.content = "not valid json at all"
+
+        good_resp = MagicMock()
+        good_resp.message.tool_calls = None
+        good_resp.message.content = self.VALID_PAYLOAD
+
+        with patch("ollama.chat", side_effect=[bad_resp, good_resp]) as mock_chat:
+            output, _ = agent._agentic_run("Feature Stores")
+
+        assert output.anecdote == "refresher"
+        # Second call must use format enforcement
+        second_call_kwargs = mock_chat.call_args_list[1][1]
+        assert second_call_kwargs["format"] == AgentOutput.model_json_schema()
