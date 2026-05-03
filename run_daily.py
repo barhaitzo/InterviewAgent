@@ -62,7 +62,7 @@ def main(dry_run: bool = False) -> None:
             sender = EmailSender()
             sender.send(
                 subject=f"Interview Prep — {topic}",
-                body_html=EmailSender.build_html(output.anecdote, output.question, topic),
+                body_html=EmailSender.build_html(output.anecdote, output.question, topic, agent.gen_model),
                 body_text=f"{output.anecdote}\n\n{output.question}",
             )
             logger.info("Email sent.")
