@@ -17,12 +17,23 @@ logger = logging.getLogger(__name__)
 
 
 def pick_topic(agent: Agent, memory: Memory) -> str:
-    """Pick a topic not sent within RECENCY_DAYS; fall back to LRU when all are covered."""
+    """Pick the next topic.
+
+    Sequential mode (SEQUENTIAL_LEARNING=True): walk topics in document order,
+    advancing past the last-sent topic and wrapping around.
+    Random mode (default): avoid recently sent topics; fall back to LRU when all covered.
+    """
     all_topics = agent.get_all_topics()
     if not all_topics:
         raise RuntimeError(
             "No topics found in ChromaDB — run 'python pipeline/ingest.py' first."
         )
+
+    if config.SEQUENTIAL_LEARNING:
+        last = memory.get_last_topic()
+        if last and last in all_topics:
+            return all_topics[(all_topics.index(last) + 1) % len(all_topics)]
+        return all_topics[0]
 
     recent = set(memory.get_recent_topics())
     available = [t for t in all_topics if t not in recent]

@@ -226,5 +226,6 @@ All tunable settings live in `config.py`:
 | `MAX_TOOL_CALLS` | `5` | Safety cap on retrieval iterations per run |
 | `CHUNK_SIZE` | `500` | Approximate tokens per chunk |
 | `TOP_K` | `3` | Chunks retrieved per query |
-| `RECENCY_DAYS` | `14` | Topic repeat window (days) |
-| `COLLECTION_NAME` | `ml_system_design` | ChromaDB collection name |
+| `RECENCY_DAYS` | `14` | Topic repeat window (days); ignored in sequential mode |
+| `SEQUENTIAL_LEARNING` | `False` | Walk topics in document order instead of random; wraps around after the last topic |
+| `COLLECTION_NAME` | `ai_assisted_backend_interview` | ChromaDB collection name |

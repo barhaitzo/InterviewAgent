@@ -116,3 +116,26 @@ class TestLogRun:
     def test_logged_topic_appears_in_recent(self, memory):
         memory.log_run("New Topic", ["c1"], "a", "q")
         assert "New Topic" in memory.get_recent_topics()
+
+
+# ---------------------------------------------------------------------------
+# get_last_topic
+# ---------------------------------------------------------------------------
+
+class TestGetLastTopic:
+    def test_empty_db_returns_none(self, memory):
+        assert memory.get_last_topic() is None
+
+    def test_returns_most_recently_inserted_topic(self, memory):
+        _insert(memory, "First", days_ago=2)
+        _insert(memory, "Second", days_ago=0)
+        assert memory.get_last_topic() == "Second"
+
+    def test_single_entry_returned(self, memory):
+        _insert(memory, "Only", days_ago=1)
+        assert memory.get_last_topic() == "Only"
+
+    def test_oldest_entry_not_returned(self, memory):
+        _insert(memory, "Old", days_ago=5)
+        _insert(memory, "New", days_ago=0)
+        assert memory.get_last_topic() != "Old"

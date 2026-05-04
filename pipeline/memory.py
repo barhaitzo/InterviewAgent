@@ -65,6 +65,14 @@ class Memory:
             ).fetchall()
         return [row["topic"] for row in rows]
 
+    def get_last_topic(self) -> str | None:
+        """Return the most recently sent topic, or None if no history."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT topic FROM sent_anecdotes ORDER BY timestamp DESC LIMIT 1"
+            ).fetchone()
+        return row["topic"] if row else None
+
     def get_lru_topic(self, all_topics: list[str]) -> str:
         """Return the topic with the oldest last-sent timestamp (never-sent topics first)."""
         if not all_topics:
