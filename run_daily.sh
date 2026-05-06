@@ -8,4 +8,4 @@ mkdir -p logs
   python run_daily.py
   echo "=== Run finished: $(date -Iseconds) ==="
   echo
-} >> logs/run.log 2>&1
+} 2>&1 | tee -a logs/run.log

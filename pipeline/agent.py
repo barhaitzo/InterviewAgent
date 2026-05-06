@@ -22,33 +22,29 @@ class AgentOutput(BaseModel):
 
 class Agent:
 
-    SYSTEM_PROMPT = """\
-You are an interview prep assistant. Given excerpts from a personal ML system design \
-crash course, produce ONE concise concept refresher (3-5 sentences) and ONE thoughtful \
-interview question that probes understanding of that concept.
+    SYSTEM_PROMPT = (
+        "You are an interview prep assistant. Given excerpts from a personal {course} "
+        "crash course, produce ONE concise concept refresher (3-5 sentences) and ONE thoughtful "
+        "interview question that probes understanding of that concept.\n\n"
+        "Constraints:\n"
+        "- Ground both outputs strictly in the provided excerpts.\n"
+        "- Do not invent company names, statistics, or external facts.\n"
+        "- Refresher should be memorable and tight — no fluff.\n"
+        "- Question should be open-ended (not yes/no).\n\n"
+        "Output ONLY valid JSON: {{\"anecdote\": \"...\", \"question\": \"...\"}}"
+    )
 
-Constraints:
-- Ground both outputs strictly in the provided excerpts.
-- Do not invent company names, statistics, or external facts.
-- Refresher should be memorable and tight — no fluff.
-- Question should be open-ended (not yes/no).
-
-Output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
-"""
-
-    AGENTIC_SYSTEM_PROMPT = """\
-You are an interview prep assistant with access to a retrieve tool that searches a \
-personal ML system design crash course.
-
-Given a topic, use retrieve() to gather relevant excerpts, then produce:
-- ONE concept refresher (3–5 sentences, tight and memorable)
-- ONE open-ended interview question
-
-Instructions:
-- Call retrieve 1–3 times with specific, focused queries to gather what you need.
-- Ground both outputs strictly in retrieved content — no invented facts.
-- When ready, output ONLY valid JSON: {"anecdote": "...", "question": "..."}\
-"""
+    AGENTIC_SYSTEM_PROMPT = (
+        "You are an interview prep assistant with access to a retrieve tool that searches a "
+        "personal {course} crash course.\n\n"
+        "Given a topic, use retrieve() to gather relevant excerpts, then produce:\n"
+        "- ONE concept refresher (3–5 sentences, tight and memorable)\n"
+        "- ONE open-ended interview question\n\n"
+        "Instructions:\n"
+        "- Call retrieve 1–3 times with specific, focused queries to gather what you need.\n"
+        "- Ground both outputs strictly in retrieved content — no invented facts.\n"
+        "- When ready, output ONLY valid JSON: {{\"anecdote\": \"...\", \"question\": \"...\"}}"
+    )
 
     RETRIEVE_TOOL = {
         "type": "function",
@@ -74,19 +70,21 @@ Instructions:
     def __init__(
         self,
         chroma_path: Path = config.CHROMA_PATH,
-        collection_name: str = config.COLLECTION_NAME,
+        course_name: str = config.COURSE_NAME,
         embed_model: str = config.EMBED_MODEL,
         gen_model: str = config.GEN_MODEL,
         top_k: int = config.TOP_K,
         agentic: bool = config.AGENTIC,
         max_tool_calls: int = config.MAX_TOOL_CALLS,
     ) -> None:
+        self.course_name = course_name
         self.embed_model = embed_model
         self.gen_model = gen_model
         self.top_k = top_k
         self.agentic = agentic
         self.max_tool_calls = max_tool_calls
         self._client = chromadb.PersistentClient(path=str(chroma_path))
+        collection_name = course_name.lower().replace("-", "_").replace(" ", "_")
         try:
             self._collection = self._client.get_collection(collection_name)
         except Exception as exc:
@@ -130,7 +128,7 @@ Instructions:
 
     def _agentic_run(self, topic: str) -> tuple[AgentOutput, list[str]]:
         messages: list[dict] = [
-            {"role": "system", "content": self.AGENTIC_SYSTEM_PROMPT},
+            {"role": "system", "content": self.AGENTIC_SYSTEM_PROMPT.format(course=self.course_name)},
             {"role": "user", "content": f"Topic: {topic}"},
         ]
         all_chunk_ids: list[str] = []
@@ -221,7 +219,7 @@ Instructions:
         """Call Ollama with schema-enforced structured output."""
         context = "\n\n---\n\n".join(documents)
         messages = [
-            {"role": "system", "content": self.SYSTEM_PROMPT},
+            {"role": "system", "content": self.SYSTEM_PROMPT.format(course=self.course_name)},
             {"role": "user", "content": f"Topic: {topic}\n\nExcerpts:\n{context}"},
         ]
 

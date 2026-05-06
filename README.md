@@ -14,7 +14,7 @@ Windows Task Scheduler (10am & 14pm)
    run_daily.sh  (activates venv)
         ↓
    run_daily.py
-        ↓ picks an unseen topic from SQLite history
+        ↓ picks next topic from SQLite history
    pipeline/agent.py  (agentic loop)
         ↓ LLM calls retrieve() tool → ChromaDB → top-3 chunks
    Ollama (llama3.1:8b)
@@ -27,7 +27,7 @@ Windows Task Scheduler (10am & 14pm)
 - **Agentic loop:** LLM decides what to search for and calls `retrieve()` as a tool 1–3 times
 - **RAG layer:** ChromaDB (cosine similarity, persistent) + `nomic-embed-text` embeddings
 - **Generation:** `llama3.1:8b` via Ollama — runs fully locally on Windows host
-- **Memory:** SQLite tracks sent topics; avoids repeats within a 14-day window
+- **Memory:** SQLite tracks sent topics; sequential or randomised topic rotation
 - **Delivery:** Gmail SMTP with App Password auth
 
 ---
@@ -63,7 +63,7 @@ interview_agent/
     email_sender.py     # SMTP delivery
 
   data/
-    ml_system_design_crash_course.md     # source document (swap to change interview topic)
+    <your-course>.md    # source document (swap to change topic)
 
   storage/              # auto-created at runtime, gitignored
     chroma_db/          # vector store
@@ -125,7 +125,7 @@ EMAIL_TO=your@gmail.com
 
 ### 4. Ingest your source document
 
-Place your study material in `data/ml_system_design_crash_course.md` (markdown with `#`/`##`/`###` headings), then run **from a native WSL terminal** (not through an IDE terminal — this step is memory-intensive):
+Name your study material to match `COURSE_NAME` in `config.py` (see [Changing the course](#changing-the-course)), place it under `data/`, then run **from a native WSL terminal** (not through an IDE terminal — this step is memory-intensive):
 
 ```bash
 source .venv/bin/activate
@@ -187,10 +187,11 @@ Open **Task Scheduler** on Windows → **Create Basic Task** → name it `Interv
 
 **Action tab:**
 - Action: `Start a program`
-- Program: `wsl.exe`
-- Arguments: `-d Ubuntu -e bash -lc "cd /home/<your-username>/interview_agent && ./run_daily.sh"`
+- Program: `powershell.exe`
+- Arguments: `-NonInteractive -Command "wsl.exe -d Ubuntu -e bash -lc 'cd /home/<your-username>/interview_agent && ./run_daily.sh'"`
 
 > Use the full Linux path (e.g. `/home/<your-username>/interview_agent`) — Task Scheduler does not expand `~`.
+> Wrapping in `powershell.exe` suppresses the cmd window and handles WSL exit codes gracefully.
 
 **Settings tab:**
 - Stop the task if it runs longer than: `10 minutes`
@@ -204,10 +205,10 @@ tail ~/interview_agent/logs/run.log
 
 ---
 
-## Changing the interview topic
+## Changing the course
 
-1. Replace `data/ml_system_design_crash_course.md` with your new source document
-2. Update `COLLECTION_NAME` in `config.py`
+1. Write your study material as a markdown file with `#`/`##`/`###` headings and place it under `data/`
+2. Update `COURSE_NAME` in `config.py` to match the filename (without `.md`) — `COLLECTION_NAME` and `SOURCE_DOC` are derived automatically
 3. Re-run `python pipeline/ingest.py`
 
 Everything else stays the same.
@@ -227,5 +228,7 @@ All tunable settings live in `config.py`:
 | `CHUNK_SIZE` | `500` | Approximate tokens per chunk |
 | `TOP_K` | `3` | Chunks retrieved per query |
 | `RECENCY_DAYS` | `14` | Topic repeat window (days); ignored in sequential mode |
-| `SEQUENTIAL_LEARNING` | `False` | Walk topics in document order instead of random; wraps around after the last topic |
-| `COLLECTION_NAME` | `ai_assisted_backend_interview` | ChromaDB collection name |
+| `SEQUENTIAL_LEARNING` | `True` | Walk topics in document order; wraps around after the last topic |
+| `COURSE_NAME` | *(your course title)* | Human-readable course name; drives `COLLECTION_NAME` and `SOURCE_DOC` |
+| `COLLECTION_NAME` | *(derived)* | ChromaDB collection name — auto-slugified from `COURSE_NAME` |
+| `SOURCE_DOC` | *(derived)* | Path to the source markdown — auto-derived from `COLLECTION_NAME` |

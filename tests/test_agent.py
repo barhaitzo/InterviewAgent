@@ -12,7 +12,7 @@ def mock_agent(tmp_path: Path) -> Agent:
     mock_collection = MagicMock()
     with patch("chromadb.PersistentClient") as mock_client:
         mock_client.return_value.get_collection.return_value = mock_collection
-        agent = Agent(chroma_path=tmp_path / "chroma", collection_name="test", agentic=False)
+        agent = Agent(chroma_path=tmp_path / "chroma", course_name="test", agentic=False)
     agent._collection = mock_collection
     return agent
 
@@ -135,7 +135,7 @@ class TestRun:
             mock_client.return_value.get_collection.return_value = mock_collection
             agent = Agent(
                 chroma_path=tmp_path / "chroma",
-                collection_name="test",
+                course_name="test",
                 agentic=True,
             )
         agent._collection = mock_collection
@@ -155,7 +155,7 @@ class TestRun:
             mock_client.return_value.get_collection.return_value = mock_collection
             agent = Agent(
                 chroma_path=tmp_path / "chroma",
-                collection_name="test",
+                course_name="test",
                 agentic=True,
             )
         agent._collection = mock_collection
@@ -186,7 +186,7 @@ class TestRun:
             mock_client.return_value.get_collection.return_value = mock_collection
             agent = Agent(
                 chroma_path=tmp_path / "chroma",
-                collection_name="test",
+                course_name="test",
                 agentic=True,
             )
         agent._collection = mock_collection

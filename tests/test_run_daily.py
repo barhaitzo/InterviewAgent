@@ -20,6 +20,7 @@ def _memory(recent: list[str], lru: str | None = None, last: str | None = None) 
     return memory
 
 
+@patch.object(config, "SEQUENTIAL_LEARNING", False)
 class TestPickTopic:
     def test_picks_from_available_topics(self):
         topic = pick_topic(_agent(["A", "B", "C"]), _memory(["A"]))
