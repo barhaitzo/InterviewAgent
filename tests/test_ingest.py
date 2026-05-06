@@ -127,3 +127,23 @@ class TestParseChunks:
             ing = Ingester(source_path=md, chroma_path=tmp_path / "chroma")
         chunks = ing.parse_chunks()
         assert all(c["metadata"]["topic"] == "Top Level" for c in chunks)
+
+    def test_hash_inside_code_fence_not_treated_as_heading(self, tmp_path):
+        md = tmp_path / "fence.md"
+        md.write_text(
+            "# Real Heading\n\n"
+            "## Real Topic\n\n"
+            "Some intro.\n\n"
+            "```python\n"
+            "# this is a comment, not a heading\n"
+            "x = 1\n"
+            "```\n\n"
+            "More content.\n",
+            encoding="utf-8",
+        )
+        with patch("chromadb.PersistentClient"):
+            ing = Ingester(source_path=md, chroma_path=tmp_path / "chroma")
+        chunks = ing.parse_chunks()
+        topics = {c["metadata"]["topic"] for c in chunks}
+        assert topics == {"Real Topic"}
+        assert not any("comment" in t for t in topics)

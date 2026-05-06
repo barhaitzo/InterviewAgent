@@ -94,6 +94,7 @@ class Ingester:
         chunks: list[dict] = []
         h1 = h2 = h3 = ""
         section_lines: list[str] = []
+        in_fence = False
 
         def flush(h1: str, h2: str, h3: str, pending: list[str]) -> None:
             text = "\n".join(pending).strip()
@@ -114,6 +115,13 @@ class Ingester:
                 })
 
         for line in lines:
+            if line.startswith("```"):
+                in_fence = not in_fence
+                section_lines.append(line)
+                continue
+            if in_fence:
+                section_lines.append(line)
+                continue
             if line.startswith("### "):
                 flush(h1, h2, h3, section_lines)
                 h3 = line[4:].strip()
