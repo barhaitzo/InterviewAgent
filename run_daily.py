@@ -57,24 +57,24 @@ def main(dry_run: bool = False) -> None:
 
         output, chunk_ids = agent.run(topic)
         logger.info(
-            "Generated — anecdote: %d chars, question: %d chars",
+            "Generated — anecdote: %d chars, key_takeaway: %d chars",
             len(output.anecdote),
-            len(output.question),
+            len(output.key_takeaway),
         )
 
         if dry_run:
             print("\n--- DRY RUN OUTPUT ---")
-            print(f"Topic:    {topic}")
-            print(f"\nAnecdote: {output.anecdote}")
-            print(f"\nQuestion: {output.question}")
-            print(f"\nChunks:   {chunk_ids}")
+            print(f"Topic:        {topic}")
+            print(f"\nAnecdote:     {output.anecdote}")
+            print(f"\nKey takeaway: {output.key_takeaway}")
+            print(f"\nChunks:       {chunk_ids}")
             print("--- (email not sent) ---\n")
         else:
             sender = EmailSender()
             sender.send(
                 subject=f"Interview Prep — {topic}",
-                body_html=EmailSender.build_html(output.anecdote, output.question, topic, agent.gen_model),
-                body_text=f"{output.anecdote}\n\n{output.question}",
+                body_html=EmailSender.build_html(output.anecdote, output.key_takeaway, topic, agent.gen_model),
+                body_text=f"{output.anecdote}\n\nKey takeaway: {output.key_takeaway}",
             )
             logger.info("Email sent.")
 
@@ -82,7 +82,7 @@ def main(dry_run: bool = False) -> None:
             topic=topic,
             chunk_ids=chunk_ids,
             anecdote=output.anecdote,
-            question=output.question,
+            key_takeaway=output.key_takeaway,
         )
 
     except Exception:

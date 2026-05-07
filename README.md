@@ -1,6 +1,6 @@
 # Interview Agent
 
-A local, always-on agentic system that delivers one **concept refresher** + one **interview question** to your inbox every morning — grounded in your own study material, zero paid APIs.
+A local, always-on agentic system that delivers one **concept refresher** + one **key takeaway** to your inbox every morning — grounded in your own study material, zero paid APIs.
 
 Built as a learning project to understand RAG pipelines and agentic systems from the ground up, without frameworks.
 
@@ -18,7 +18,7 @@ Windows Task Scheduler (10am & 14pm)
    pipeline/agent.py  (agentic loop)
         ↓ LLM calls retrieve() tool → ChromaDB → top-3 chunks
    Ollama (llama3.1:8b)
-        ↓ generates JSON {anecdote, question}
+        ↓ generates JSON {anecdote, key_takeaway}
    pipeline/email_sender.py
         ↓ Gmail SMTP
    Your inbox
@@ -169,7 +169,7 @@ The tests cover chunking, JSON parsing, topic rotation, and email building — a
 python run_daily.py --dry-run
 ```
 
-Skips sending email and prints the generated anecdote + question to stdout instead.
+Skips sending email and prints the generated anecdote + key takeaway to stdout instead.
 
 ### 7. Send a test email
 

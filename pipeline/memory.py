@@ -92,7 +92,7 @@ class Memory:
         topic: str,
         chunk_ids: list[str],
         anecdote: str,
-        question: str,
+        key_takeaway: str,
         model: str = config.GEN_MODEL,
     ) -> None:
         """Insert a row recording today's send."""
@@ -107,7 +107,7 @@ class Memory:
                         topic,
                         json.dumps(chunk_ids),
                         anecdote,
-                        question,
+                        key_takeaway,
                         model,
                     ),
                 )
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         topic="__smoke_test__",
         chunk_ids=["abc", "def"],
         anecdote="Test anecdote.",
-        question="Test question?",
+        key_takeaway="Test key takeaway.",
     )
     recent = mem.get_recent_topics()
     logger.info("Recent topics (last %d days): %s", mem.recency_days, recent)

@@ -17,21 +17,22 @@ logger = logging.getLogger(__name__)
 
 class AgentOutput(BaseModel):
     anecdote: str
-    question: str
+    key_takeaway: str
 
 
 class Agent:
 
     SYSTEM_PROMPT = (
         "You are an interview prep assistant. Given excerpts from a personal {course} "
-        "crash course, produce ONE concise concept refresher (3-5 sentences) and ONE thoughtful "
-        "interview question that probes understanding of that concept.\n\n"
+        "crash course, produce ONE concise concept refresher (3-5 sentences) and ONE key takeaway.\n\n"
         "Constraints:\n"
         "- Ground both outputs strictly in the provided excerpts.\n"
         "- Do not invent company names, statistics, or external facts.\n"
         "- Refresher should be memorable and tight — no fluff.\n"
-        "- Question should be open-ended (not yes/no).\n\n"
-        "Output ONLY valid JSON: {{\"anecdote\": \"...\", \"question\": \"...\"}}"
+        "- Key takeaway: if the excerpts contain a line starting with '**Key takeaway:**', "
+        "extract it verbatim (without the prefix). Otherwise write one tight sentence summarising "
+        "the single most important thing to remember.\n\n"
+        "Output ONLY valid JSON: {{\"anecdote\": \"...\", \"key_takeaway\": \"...\"}}"
     )
 
     AGENTIC_SYSTEM_PROMPT = (
@@ -39,11 +40,14 @@ class Agent:
         "personal {course} crash course.\n\n"
         "Given a topic, use retrieve() to gather relevant excerpts, then produce:\n"
         "- ONE concept refresher (3–5 sentences, tight and memorable)\n"
-        "- ONE open-ended interview question\n\n"
+        "- ONE key takeaway\n\n"
         "Instructions:\n"
         "- Call retrieve 1–3 times with specific, focused queries to gather what you need.\n"
         "- Ground both outputs strictly in retrieved content — no invented facts.\n"
-        "- When ready, output ONLY valid JSON: {{\"anecdote\": \"...\", \"question\": \"...\"}}"
+        "- Key takeaway: if the retrieved content contains a line starting with '**Key takeaway:**', "
+        "extract it verbatim (without the prefix). Otherwise write one tight sentence summarising "
+        "the single most important thing to remember.\n"
+        "- When ready, output ONLY valid JSON: {{\"anecdote\": \"...\", \"key_takeaway\": \"...\"}}"
     )
 
     RETRIEVE_TOOL = {
@@ -267,6 +271,6 @@ if __name__ == "__main__":
     print()
     output, chunk_ids = agent.run(test_topic)
     print(f"Anecdote:\n{output.anecdote}\n")
-    print(f"Question:\n{output.question}\n")
+    print(f"Key takeaway:\n{output.key_takeaway}\n")
     label = "Chunks LLM retrieved" if agent.agentic else "Chunks used"
     print(f"{label}: {chunk_ids}")

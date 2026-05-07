@@ -89,32 +89,32 @@ class TestGetLruTopic:
 
 class TestLogRun:
     def test_row_inserted(self, memory):
-        memory.log_run("Feature Stores", ["a", "b"], "anecdote text", "question text?")
+        memory.log_run("Feature Stores", ["a", "b"], "anecdote text", "key takeaway text")
         with memory._connect() as conn:
             rows = conn.execute("SELECT * FROM sent_anecdotes").fetchall()
         assert len(rows) == 1
 
     def test_correct_topic_stored(self, memory):
-        memory.log_run("Feature Stores", ["a"], "anecdote", "question")
+        memory.log_run("Feature Stores", ["a"], "anecdote", "key takeaway")
         with memory._connect() as conn:
             row = conn.execute("SELECT topic FROM sent_anecdotes").fetchone()
         assert row["topic"] == "Feature Stores"
 
     def test_chunk_ids_stored_as_json_array(self, memory):
-        memory.log_run("T", ["x", "y", "z"], "a", "q")
+        memory.log_run("T", ["x", "y", "z"], "a", "kt")
         with memory._connect() as conn:
             row = conn.execute("SELECT chunk_ids_used FROM sent_anecdotes").fetchone()
         assert json.loads(row["chunk_ids_used"]) == ["x", "y", "z"]
 
     def test_multiple_runs_all_stored(self, memory):
-        memory.log_run("A", ["c1"], "a1", "q1")
-        memory.log_run("B", ["c2"], "a2", "q2")
+        memory.log_run("A", ["c1"], "a1", "kt1")
+        memory.log_run("B", ["c2"], "a2", "kt2")
         with memory._connect() as conn:
             count = conn.execute("SELECT COUNT(*) FROM sent_anecdotes").fetchone()[0]
         assert count == 2
 
     def test_logged_topic_appears_in_recent(self, memory):
-        memory.log_run("New Topic", ["c1"], "a", "q")
+        memory.log_run("New Topic", ["c1"], "a", "kt")
         assert "New Topic" in memory.get_recent_topics()
 
 

@@ -89,7 +89,7 @@ class TestRetrieve:
 # ---------------------------------------------------------------------------
 
 class TestGenerate:
-    VALID_PAYLOAD = '{"anecdote": "concept refresher", "question": "open-ended q?"}'
+    VALID_PAYLOAD = '{"anecdote": "concept refresher", "key_takeaway": "the key point"}'
 
     def test_returns_agent_output(self, mock_agent):
         with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)):
@@ -117,7 +117,7 @@ class TestGenerate:
 # ---------------------------------------------------------------------------
 
 class TestRun:
-    VALID_PAYLOAD = '{"anecdote": "refresher", "question": "q?"}'
+    VALID_PAYLOAD = '{"anecdote": "refresher", "key_takeaway": "the key point"}'
 
     def test_non_agentic_uses_retrieve_and_generate(self, mock_agent, tmp_path):
         mock_agent._collection.query.return_value = {
@@ -140,7 +140,7 @@ class TestRun:
             )
         agent._collection = mock_collection
 
-        expected = (AgentOutput(anecdote="a", question="q?"), ["id1"])
+        expected = (AgentOutput(anecdote="a", key_takeaway="the key point"), ["id1"])
         with patch.object(agent, "_agentic_run", return_value=expected) as mock_ar:
             output, ids = agent.run("Feature Stores")
         mock_ar.assert_called_once_with("Feature Stores")

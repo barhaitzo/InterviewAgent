@@ -16,7 +16,7 @@ TOP_K = 3               # chunks retrieved per topic
 RECENCY_DAYS = 14       # topics used within this window are skipped
 SEQUENTIAL_LEARNING = True  # if True, walk topics in document order instead of random
 
-COURSE_NAME = "AI-assisted backend interview crash course"  # only this needs to change when swapping courses, should be similar to the source doc filename
+COURSE_NAME = "System Design Crash Course"  # only this needs to change when swapping courses, should be similar to the source doc filename
 COLLECTION_NAME = re.sub(r"[^a-z0-9]+", "_", COURSE_NAME.lower()).strip("_")
 SOURCE_DOC = Path(f"./data/{COLLECTION_NAME}.md")
 

@@ -25,16 +25,16 @@ def sender() -> EmailSender:
 
 class TestBuildHtml:
     def test_contains_topic(self, sender):
-        html = sender.build_html("anecdote", "question", "Feature Stores")
+        html = sender.build_html("anecdote", "key takeaway", "Feature Stores")
         assert "Feature Stores" in html
 
     def test_contains_anecdote(self, sender):
-        html = sender.build_html("my anecdote text", "q", "topic")
+        html = sender.build_html("my anecdote text", "kt", "topic")
         assert "my anecdote text" in html
 
-    def test_contains_question(self, sender):
-        html = sender.build_html("a", "my question text?", "topic")
-        assert "my question text?" in html
+    def test_contains_key_takeaway(self, sender):
+        html = sender.build_html("a", "my key takeaway text", "topic")
+        assert "my key takeaway text" in html
 
     def test_is_valid_html_document(self, sender):
         html = sender.build_html("a", "q", "t")
