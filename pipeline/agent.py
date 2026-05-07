@@ -107,8 +107,8 @@ class Agent:
     # Internal — tool execution
     # ------------------------------------------------------------------
 
-    def _retrieve_for_tool(self, query: str) -> tuple[str, list[str]]:
-        """Execute a retrieve tool call. No topic filter — free-form semantic search."""
+    def _retrieve_for_tool(self, query: str, topic: str) -> tuple[str, list[str]]:
+        """Execute a retrieve tool call, scoped to the selected topic."""
         try:
             resp = ollama.embeddings(model=self.embed_model, prompt=query)
         except Exception as exc:
@@ -118,6 +118,7 @@ class Agent:
         results = self._collection.query(
             query_embeddings=[resp["embedding"]],
             n_results=self.top_k,
+            where={"topic": topic},
         )
         docs = results["documents"][0]
         ids = results["ids"][0]
@@ -178,7 +179,7 @@ class Agent:
             for tc in resp.message.tool_calls:
                 query = tc.function.arguments.get("query", "")
                 logger.info("  [tool] retrieve(%r)", query)
-                result, ids = self._retrieve_for_tool(query)
+                result, ids = self._retrieve_for_tool(query, topic)
                 all_chunk_ids.extend(ids)
                 retrieved_contexts.append(result)
                 messages.append({"role": "tool", "content": result})

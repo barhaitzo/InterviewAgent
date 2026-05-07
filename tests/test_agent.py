@@ -179,6 +179,8 @@ class TestRun:
 
         assert output.anecdote == "refresher"
         assert "id1" in ids
+        kwargs = mock_collection.query.call_args[1]
+        assert kwargs["where"] == {"topic": "Feature Stores"}
 
     def test_agentic_run_retries_with_format_on_invalid_output(self, tmp_path):
         mock_collection = MagicMock()

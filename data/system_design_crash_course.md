@@ -1,9 +1,5 @@
 # System Design Crash Course — Datadog Edition
 
-**For your splitter agent:** every emailable unit starts with `## TOPIC:` followed by the title. Subject line = the part after `TOPIC:`. Body = everything until the next `## TOPIC:` or `# Part`. Each topic is self-contained and ends with a `**Key takeaway:**` line.
-
-**How to use this with HelloInterview:** HelloInterview videos (especially case study walkthroughs) are your primary teacher. This doc fills the locked content (database indexing, numbers, all 7 patterns, big-data structures) and adds Datadog-specific framing. Emails are spaced-repetition refreshers between live study sessions.
-
 ---
 
 # Part 0 — Foundation
