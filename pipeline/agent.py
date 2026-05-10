@@ -26,7 +26,7 @@ class Agent:
         "You are an interview prep assistant. Given excerpts from a personal {course} "
         "crash course, produce ONE concept refresher and ONE key takeaway.\n\n"
         "Refresher rules:\n"
-        "- Write 4–6 sentences.\n"
+        "- Write 4–6 sentences of flowing prose. Do NOT use bullet points or numbered lists.\n"
         "- Include the concrete facts from the excerpts: specific numbers, latency figures, "
         "formulas, thresholds, named strategies, decision rules. Do NOT just describe the topic "
         "at a high level — give content the reader can act on.\n"
@@ -45,9 +45,10 @@ class Agent:
         "refresher and ONE key takeaway.\n\n"
         "Instructions:\n"
         "- Call retrieve 1–3 times to gather what you need.\n"
-        "- Refresher: write 4–6 sentences. Include the concrete facts: specific numbers, latency "
-        "figures, formulas, thresholds, named strategies, decision rules. Do NOT just describe "
-        "the topic — give content the reader can act on. Ground strictly in retrieved content.\n"
+        "- Refresher: write 4–6 sentences of flowing prose. Do NOT use bullet points or numbered "
+        "lists. Include the concrete facts: specific numbers, latency figures, formulas, "
+        "thresholds, named strategies, decision rules. Do NOT just describe the topic — give "
+        "content the reader can act on. Ground strictly in retrieved content.\n"
         "- Key takeaway: if retrieved content contains a line starting with '**Key takeaway:**', "
         "extract it verbatim (without the prefix). Otherwise write one tight actionable sentence.\n"
         "- Return your answer as a JSON object with keys 'anecdote' and 'key_takeaway'."
@@ -148,7 +149,7 @@ class Agent:
                     model=self.gen_model,
                     messages=messages,
                     tools=[self.RETRIEVE_TOOL],
-                    options={"temperature": 0.4},
+                    options={"temperature": 0.4, "num_predict": 600},
                 )
             except Exception as exc:
                 raise RuntimeError(
@@ -167,7 +168,7 @@ class Agent:
                         model=self.gen_model,
                         messages=messages,
                         format=AgentOutput.model_json_schema(),
-                        options={"temperature": 0.2},
+                        options={"temperature": 0.2, "num_predict": 600},
                     )
                     return AgentOutput.model_validate_json(final.message.content), all_chunk_ids
 
@@ -238,7 +239,7 @@ class Agent:
                 model=self.gen_model,
                 messages=messages,
                 format=AgentOutput.model_json_schema(),
-                options={"temperature": 0.4},
+                options={"temperature": 0.4, "num_predict": 600},
             )
         except Exception as exc:
             raise RuntimeError(
