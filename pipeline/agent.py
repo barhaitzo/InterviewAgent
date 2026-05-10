@@ -26,7 +26,7 @@ class Agent:
         "You are an interview prep assistant. Given excerpts from a personal {course} "
         "crash course, produce ONE concept refresher and ONE key takeaway.\n\n"
         "Refresher rules:\n"
-        "- 3–5 sentences, but prioritise completeness over brevity.\n"
+        "- Write 4–6 sentences.\n"
         "- Include the concrete facts from the excerpts: specific numbers, latency figures, "
         "formulas, thresholds, named strategies, decision rules. Do NOT just describe the topic "
         "at a high level — give content the reader can act on.\n"
@@ -35,7 +35,7 @@ class Agent:
         "- If the excerpts contain a line starting with '**Key takeaway:**', "
         "extract it verbatim (without the prefix).\n"
         "- Otherwise write one tight sentence naming the single most actionable thing to remember.\n\n"
-        "Output ONLY valid JSON: {{\"anecdote\": \"...\", \"key_takeaway\": \"...\"}}"
+        "Return your answer as a JSON object with keys 'anecdote' and 'key_takeaway'."
     )
 
     AGENTIC_SYSTEM_PROMPT = (
@@ -45,12 +45,12 @@ class Agent:
         "refresher and ONE key takeaway.\n\n"
         "Instructions:\n"
         "- Call retrieve 1–3 times to gather what you need.\n"
-        "- Refresher: 3–5 sentences. Include the concrete facts: specific numbers, latency "
+        "- Refresher: write 4–6 sentences. Include the concrete facts: specific numbers, latency "
         "figures, formulas, thresholds, named strategies, decision rules. Do NOT just describe "
         "the topic — give content the reader can act on. Ground strictly in retrieved content.\n"
         "- Key takeaway: if retrieved content contains a line starting with '**Key takeaway:**', "
         "extract it verbatim (without the prefix). Otherwise write one tight actionable sentence.\n"
-        "- When ready, output ONLY valid JSON: {{\"anecdote\": \"...\", \"key_takeaway\": \"...\"}}"
+        "- Return your answer as a JSON object with keys 'anecdote' and 'key_takeaway'."
     )
 
     RETRIEVE_TOOL = {
