@@ -11,7 +11,7 @@ MAX_TOOL_CALLS = 5  # safety cap on retrieval iterations per run
 
 CHUNK_SIZE = 500        # approximate tokens per chunk
 CHUNK_OVERLAP = 50      # approximate token overlap between chunks
-TOP_K = 3               # chunks retrieved per topic
+TOP_K = 5               # chunks retrieved per query (raised to capture all chunks for dense topics)
 
 RECENCY_DAYS = 14       # topics used within this window are skipped
 SEQUENTIAL_LEARNING = True  # if True, walk topics in document order instead of random
