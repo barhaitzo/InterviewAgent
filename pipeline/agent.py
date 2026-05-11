@@ -159,20 +159,18 @@ class Agent:
                 ) from exc
 
             if not resp.message.tool_calls:
-                try:
-                    return AgentOutput.model_validate_json(resp.message.content), all_chunk_ids
-                except ValidationError:
-                    # Output wasn't valid — re-ask with schema enforcement
-                    logger.warning("Agentic output failed validation — retrying with format constraint.")
-                    messages.append({"role": "assistant", "content": resp.message.content or ""})
-                    messages.append({"role": "user", "content": "Now produce the output as structured JSON."})
-                    final = ollama.chat(
-                        model=self.gen_model,
-                        messages=messages,
-                        format=AgentOutput.model_json_schema(),
-                        options={"temperature": 0.2, "num_predict": 800},
-                    )
-                    return AgentOutput.model_validate_json(final.message.content), all_chunk_ids
+                # Tool phase complete — dedicated format-enforced call for structured output.
+                # Ollama's tool-call mode and JSON format mode are incompatible in one call,
+                # so we always use a separate generation step rather than parse-and-retry.
+                messages.append({"role": "assistant", "content": resp.message.content or ""})
+                messages.append({"role": "user", "content": "Now produce the output as structured JSON."})
+                final = ollama.chat(
+                    model=self.gen_model,
+                    messages=messages,
+                    format=AgentOutput.model_json_schema(),
+                    options={"temperature": 0.2, "num_predict": 800},
+                )
+                return AgentOutput.model_validate_json(final.message.content), all_chunk_ids
 
             messages.append({
                 "role": "assistant",

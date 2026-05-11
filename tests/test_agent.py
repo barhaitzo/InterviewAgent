@@ -160,7 +160,7 @@ class TestRun:
             )
         agent._collection = mock_collection
 
-        # First response: tool call; second response: final answer
+        # First response: tool call; second: end of tool phase; third: format-enforced output
         tool_call = MagicMock()
         tool_call.function.name = "retrieve"
         tool_call.function.arguments = {"query": "feature store architecture"}
@@ -169,20 +169,27 @@ class TestRun:
         first_resp.message.tool_calls = [tool_call]
         first_resp.message.content = ""
 
-        final_resp = MagicMock()
-        final_resp.message.tool_calls = None
-        final_resp.message.content = self.VALID_PAYLOAD
+        done_resp = MagicMock()
+        done_resp.message.tool_calls = None
+        done_resp.message.content = "here is what I found"
+
+        format_resp = MagicMock()
+        format_resp.message.tool_calls = None
+        format_resp.message.content = self.VALID_PAYLOAD
 
         with patch("ollama.embeddings", return_value={"embedding": [0.1]}), \
-             patch("ollama.chat", side_effect=[first_resp, final_resp]):
+             patch("ollama.chat", side_effect=[first_resp, done_resp, format_resp]) as mock_chat:
             output, ids = agent._agentic_run("Feature Stores")
 
         assert output.anecdote == "refresher"
         assert "id1" in ids
         kwargs = mock_collection.query.call_args[1]
         assert kwargs["where"] == {"topic": "Feature Stores"}
+        # Third call must use format enforcement
+        third_call_kwargs = mock_chat.call_args_list[2][1]
+        assert third_call_kwargs["format"] == AgentOutput.model_json_schema()
 
-    def test_agentic_run_retries_with_format_on_invalid_output(self, tmp_path):
+    def test_agentic_run_always_uses_format_for_final_output(self, tmp_path):
         mock_collection = MagicMock()
         with patch("chromadb.PersistentClient") as mock_client:
             mock_client.return_value.get_collection.return_value = mock_collection
@@ -193,18 +200,19 @@ class TestRun:
             )
         agent._collection = mock_collection
 
-        bad_resp = MagicMock()
-        bad_resp.message.tool_calls = None
-        bad_resp.message.content = "not valid json at all"
+        # Model immediately signals end of tool phase (no tool calls)
+        done_resp = MagicMock()
+        done_resp.message.tool_calls = None
+        done_resp.message.content = "here is what I found"
 
-        good_resp = MagicMock()
-        good_resp.message.tool_calls = None
-        good_resp.message.content = self.VALID_PAYLOAD
+        format_resp = MagicMock()
+        format_resp.message.tool_calls = None
+        format_resp.message.content = self.VALID_PAYLOAD
 
-        with patch("ollama.chat", side_effect=[bad_resp, good_resp]) as mock_chat:
+        with patch("ollama.chat", side_effect=[done_resp, format_resp]) as mock_chat:
             output, _ = agent._agentic_run("Feature Stores")
 
         assert output.anecdote == "refresher"
-        # Second call must use format enforcement
+        # Second call must always use format enforcement
         second_call_kwargs = mock_chat.call_args_list[1][1]
         assert second_call_kwargs["format"] == AgentOutput.model_json_schema()
