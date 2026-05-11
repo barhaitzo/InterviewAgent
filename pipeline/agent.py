@@ -33,7 +33,7 @@ class Agent:
         "at a high level — give content the reader can act on.\n"
         "- Ground strictly in the provided excerpts. Do not invent facts.\n\n"
         "Key takeaway rules:\n"
-        "- If the excerpts contain a line starting with '**Key takeaway:**', "
+        "- If the excerpts contain a line starting with 'Key takeaway:', "
         "extract it verbatim (without the prefix).\n"
         "- Otherwise write one tight sentence naming the single most actionable thing to remember.\n\n"
         "Return your answer as a JSON object with keys 'anecdote' and 'key_takeaway'."
@@ -51,7 +51,7 @@ class Agent:
         "Include the concrete facts: specific numbers, latency figures, formulas, thresholds, "
         "named strategies, decision rules. Do NOT just describe the topic — give content the "
         "reader can act on. Ground strictly in retrieved content.\n"
-        "- Key takeaway: if retrieved content contains a line starting with '**Key takeaway:**', "
+        "- Key takeaway: if retrieved content contains a line starting with 'Key takeaway:', "
         "extract it verbatim (without the prefix). Otherwise write one tight actionable sentence.\n"
         "- Return your answer as a JSON object with keys 'anecdote' and 'key_takeaway'."
     )
