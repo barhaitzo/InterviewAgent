@@ -110,6 +110,19 @@ class Agent:
             logger.info("  ... LLM still generating (%ds elapsed)", elapsed)
 
     # ------------------------------------------------------------------
+    # Internal — helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_key_takeaway(text: str) -> str | None:
+        """Return the verbatim Key takeaway line from source text, or None."""
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("key takeaway:"):
+                return stripped[len("key takeaway:"):].strip()
+        return None
+
+    # ------------------------------------------------------------------
     # Internal — tool execution
     # ------------------------------------------------------------------
 
@@ -173,7 +186,14 @@ class Agent:
                     format=AgentOutput.model_json_schema(),
                     options={"temperature": 0.2, "num_predict": 800},
                 )
-                return AgentOutput.model_validate_json(final.message.content), all_chunk_ids
+                output = AgentOutput.model_validate_json(final.message.content)
+                all_retrieved = "\n".join(
+                    m["content"] for m in messages if m.get("role") == "tool"
+                )
+                kt = self._find_key_takeaway(all_retrieved)
+                if kt:
+                    output = output.model_copy(update={"key_takeaway": kt})
+                return output, all_chunk_ids
 
             messages.append({
                 "role": "assistant",
@@ -251,7 +271,11 @@ class Agent:
         finally:
             stop.set()
 
-        return AgentOutput.model_validate_json(resp.message.content)
+        output = AgentOutput.model_validate_json(resp.message.content)
+        kt = self._find_key_takeaway(context)
+        if kt:
+            output = output.model_copy(update={"key_takeaway": kt})
+        return output
 
     def run(self, topic: str) -> tuple[AgentOutput, list[str]]:
         """Full pipeline. Agentic: LLM retrieves via tool calls. Non-agentic: pre-fetched chunks."""

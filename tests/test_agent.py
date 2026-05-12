@@ -97,6 +97,17 @@ class TestGenerate:
         assert isinstance(out, AgentOutput)
         assert out.anecdote == "concept refresher"
 
+    def test_key_takeaway_overridden_from_source(self, mock_agent):
+        chunk = "Some content.\nKey takeaway: verbatim takeaway from source."
+        with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)):
+            out = mock_agent.generate("topic", [chunk])
+        assert out.key_takeaway == "verbatim takeaway from source."
+
+    def test_key_takeaway_from_model_when_not_in_source(self, mock_agent):
+        with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)):
+            out = mock_agent.generate("topic", ["chunk with no takeaway line"])
+        assert out.key_takeaway == "the key point"
+
     def test_schema_format_passed_to_ollama(self, mock_agent):
         with patch("ollama.chat", return_value=_chat_response(self.VALID_PAYLOAD)) as mock_chat:
             mock_agent.generate("topic", ["chunk1"])
@@ -216,3 +227,37 @@ class TestRun:
         # Second call must always use format enforcement
         second_call_kwargs = mock_chat.call_args_list[1][1]
         assert second_call_kwargs["format"] == AgentOutput.model_json_schema()
+
+    def test_agentic_run_overrides_key_takeaway_from_tool_result(self, tmp_path):
+        mock_collection = MagicMock()
+        mock_collection.query.return_value = {
+            "documents": [["Some content.\nKey takeaway: verbatim from source."]],
+            "ids": [["id1"]],
+        }
+        with patch("chromadb.PersistentClient") as mock_client:
+            mock_client.return_value.get_collection.return_value = mock_collection
+            agent = Agent(chroma_path=tmp_path / "chroma", course_name="test", agentic=True)
+        agent._collection = mock_collection
+
+        tool_call = MagicMock()
+        tool_call.function.name = "retrieve"
+        tool_call.function.arguments = {"query": "indexing"}
+
+        tool_resp = MagicMock()
+        tool_resp.message.tool_calls = [tool_call]
+        tool_resp.message.content = ""
+
+        done_resp = MagicMock()
+        done_resp.message.tool_calls = None
+        done_resp.message.content = ""
+
+        format_resp = MagicMock()
+        format_resp.message.tool_calls = None
+        format_resp.message.content = self.VALID_PAYLOAD  # model produces "the key point"
+
+        with patch("ollama.embeddings", return_value={"embedding": [0.1]}), \
+             patch("ollama.chat", side_effect=[tool_resp, done_resp, format_resp]):
+            output, _ = agent._agentic_run("Feature Stores")
+
+        # Python override wins over model output
+        assert output.key_takeaway == "verbatim from source."
