@@ -26,7 +26,7 @@ curl http://localhost:11434/api/tags
 - All config lives in `config.py`. Never hardcode model names, paths, or thresholds in other modules.
 - Secrets in `.env`, loaded via `python-dotenv`. `.env` is gitignored.
 - Logging: every module uses `logging` (not `print`). `run_daily.sh` pipes stdout/stderr through `tee` to `logs/run.log`.
-- LLM JSON outputs: always validate with a Pydantic model before use. Retry once on parse failure with a "your previous output was invalid JSON" follow-up; fail loudly on second failure.
+- LLM JSON outputs: always validate with a Pydantic model before use. In agentic mode, use the two-phase pattern (see below) — not parse-and-retry. In non-agentic mode, use `format=AgentOutput.model_json_schema()` directly; Ollama enforces valid JSON.
 - SQLite: use `sqlite3` stdlib with `Row` factory; wrap connections in context managers.
 - Chroma: use the `PersistentClient`, not in-memory.
 
@@ -48,10 +48,31 @@ Only `COURSE_NAME` in `config.py` needs to change. `COLLECTION_NAME` and `SOURCE
 System prompt enforces:
 - Grounding strictly in retrieved excerpts
 - No invented companies, stats, or external facts
-- 3–5 sentence refresher, one open-ended question
-- JSON-only output: `{"anecdote": "...", "question": "..."}`
+- 4–6 sentence prose refresher (no markdown: no bullets, bold, headers, or newlines inside the JSON value)
+- JSON-only output: `{"anecdote": "...", "key_takeaway": "..."}`
 
 The course name is injected at runtime via `self.course_name` on the `Agent` instance. Keep the prompt short — `llama3.1:8b` follows clean instructions well; don't over-engineer.
+
+## Agentic output — hard-won lessons
+
+**Two-phase pattern is required.** Ollama's tool-call mode and JSON `format` mode are incompatible in a single call. Always separate:
+1. Tool loop — model calls `retrieve()` freely (no `format` param)
+2. Format-enforced final call — append tool results to history, then call with `format=AgentOutput.model_json_schema()`
+
+**The final handoff prompt matters.** "Now produce the output as structured JSON." is too terse — the model echoes whatever it said during the tool phase. Use: _"Using the retrieved excerpts above, write a 4–6 sentence prose refresher that covers all the key facts, then output the result as structured JSON."_
+
+**Set `num_predict` explicitly.** Without it, Ollama may truncate mid-sentence on content-heavy topics. Current safe value: `800`.
+
+**Source doc formatting bleeds into output.** `llama3.1:8b` mimics the structure of retrieved chunks. Markdown in the source (`**bold**`, bullet lists, numbered lists) causes the model to reproduce that structure verbatim inside the JSON string. Keep the source doc plain text — strip `**` before ingesting.
+
+**After any quality fix involving a specific topic:** delete that topic's row from `sent_anecdotes` in `history.db` so the scheduler reruns it and the fix can be verified.
+
+## Workflow preferences
+
+- Commits are prepared by Claude; the user pushes to origin themselves.
+- When a bad refresher arrives, the user sends it verbatim. Expected response: diagnose root cause, fix, delete the bad history entry, commit.
+- Prefer fixing root causes (e.g. clean the source doc) over workarounds (e.g. post-processing the model output).
+- After changing the source doc, always re-run `python pipeline/ingest.py` — the old chunks stay in ChromaDB until replaced.
 
 ## Topic rotation logic
 
