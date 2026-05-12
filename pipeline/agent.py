@@ -163,7 +163,10 @@ class Agent:
                 # Ollama's tool-call mode and JSON format mode are incompatible in one call,
                 # so we always use a separate generation step rather than parse-and-retry.
                 messages.append({"role": "assistant", "content": resp.message.content or ""})
-                messages.append({"role": "user", "content": "Now produce the output as structured JSON."})
+                messages.append({"role": "user", "content": (
+                    "Using the retrieved excerpts above, write a 4-6 sentence prose refresher "
+                    "that covers all the key facts, then output the result as structured JSON."
+                )})
                 final = ollama.chat(
                     model=self.gen_model,
                     messages=messages,
